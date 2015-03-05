@@ -4,8 +4,6 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
 
-import com.davemorrissey.labs.subscaleview.decoder.DeprecatedConstants;
-
 abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
 
     protected static final String FILE_SCHEME = "file:///";
