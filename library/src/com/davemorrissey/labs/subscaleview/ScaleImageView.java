@@ -241,16 +241,6 @@ public class ScaleImageView extends ScaleImageViewBase {
         this(context, null);
     }
 
-
-
-    public final void setOrientation(int orientation) {
-        final Orientation orientationValue = Orientation.fromRotationDegrees(orientation);
-        if (orientationValue == null) {
-            throw new IllegalArgumentException("Invalid orientation: " + orientation);
-        }
-        setOrientation(orientationValue);
-    }
-
     /**
      * Display an image from a file in internal or external storage.
      * @param fileUri URI of the file to display e.g. '/sdcard/DCIM1000.PNG' or 'file:///scard/DCIM1000.PNG' (these are equivalent).
