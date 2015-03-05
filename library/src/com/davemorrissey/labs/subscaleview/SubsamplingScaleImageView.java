@@ -1898,22 +1898,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     }
 
     /**
-     * Get source width, ignoring orientation. If {@link #getOrientation()} returns 90 or 270, you can use {@link #getSHeight()}
-     * for the apparent width.
-     */
-    public final int getSWidth() {
-        return sourceWidth;
-    }
-
-    /**
-     * Get source height, ignoring orientation. If {@link #getOrientation()} returns 90 or 270, you can use {@link #getSWidth()}
-     * for the apparent height.
-     */
-    public final int getSHeight() {
-        return sourceHeight;
-    }
-
-    /**
      * Get the current state of the view (scale, center, orientation) for restoration after rotate. Will return null if
      * the view is not ready.
      */

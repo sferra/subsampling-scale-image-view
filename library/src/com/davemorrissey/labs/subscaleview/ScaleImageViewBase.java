@@ -84,5 +84,39 @@ public abstract  class ScaleImageViewBase extends View implements DeprecatedCons
         }
     }
 
+    /**
+     * Get source width, ignoring orientation. If {@link #getOrientation()} returns 90 or 270, you can use {@link #getSourceHeight()}
+     * for the apparent width.
+     */
+    public int getSourceWidth() {
+        return sourceWidth;
+    }
+
+    /**
+     * Get source height, ignoring orientation. If {@link #getOrientation()} returns 90 or 270, you can use {@link #getSourceWidth()}
+     * for the apparent height.
+     */
+    public int getSourceHeight() {
+        return sourceHeight;
+    }
+
+    /**
+     * Get source width, ignoring orientation. If {@link #getOrientation()} returns 90 or 270, you can use {@link #getSourceHeight()}
+     * for the apparent width.
+     * @deprecated Use {@link #getSourceWidth()} instead.
+     */
+    public final int getSWidth() {
+        return getSourceWidth();
+    }
+
+    /**
+     * Get source height, ignoring orientation. If {@link #getOrientation()} returns 90 or 270, you can use {@link #getSourceWidth()}
+     * for the apparent height.
+     * @deprecated Use {@link #getSourceHeight()} instead.
+     */
+    public final int getSHeight() {
+        return getSourceHeight();
+    }
+
     protected abstract void reset(boolean isNewImage);
 }
