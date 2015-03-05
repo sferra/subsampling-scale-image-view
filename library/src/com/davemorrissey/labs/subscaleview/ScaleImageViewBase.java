@@ -3,6 +3,7 @@ package com.davemorrissey.labs.subscaleview;
 import android.content.Context;
 import android.graphics.PointF;
 import android.util.AttributeSet;
+import android.util.FloatMath;
 import android.view.View;
 
 abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
@@ -175,6 +176,15 @@ abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
         width = Math.max(width, getSuggestedMinimumWidth());
         height = Math.max(height, getSuggestedMinimumHeight());
         setMeasuredDimension(width, height);
+    }
+
+    /**
+     * Pythagoras distance between two points.
+     */
+    protected static float distance(float x0, float x1, float y0, float y1) {
+        float x = x0 - x1;
+        float y = y0 - y1;
+        return FloatMath.sqrt(x * x + y * y);
     }
 
     protected abstract void reset(boolean isNewImage);

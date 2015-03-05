@@ -36,7 +36,6 @@ import android.os.Message;
 import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
-import android.util.FloatMath;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
@@ -1007,15 +1006,6 @@ public class ScaleImageView extends ScaleImageViewBase {
     private void forceCenterOnNextDraw() {
         this.sPendingCenter = new PointF(0, 0);
         this.scale = 0f;
-    }
-
-    /**
-     * Pythagoras distance between two points.
-     */
-    private float distance(float x0, float x1, float y0, float y1) {
-        float x = x0 - x1;
-        float y = y0 - y1;
-        return FloatMath.sqrt(x * x + y * y);
     }
 
     /**
