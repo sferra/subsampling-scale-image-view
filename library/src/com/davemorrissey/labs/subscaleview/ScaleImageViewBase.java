@@ -2,6 +2,7 @@ package com.davemorrissey.labs.subscaleview;
 
 import android.content.Context;
 import android.graphics.PointF;
+import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.util.FloatMath;
 import android.view.View;
@@ -15,6 +16,14 @@ abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
     private int sourceWidth;
     private int sourceHeight;
     protected int sourceOrientation;
+
+    // Screen coordinate of top-left corner of source image
+    protected PointF vTranslate;
+    protected PointF vTranslateStart;
+
+    // Current scale and scale at start of zoom
+    protected float scale;
+    protected float scaleStart;
 
     // Image orientation setting
     protected Orientation orientation = Orientation.DEGREES_0;
@@ -174,6 +183,115 @@ abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
         width = Math.max(width, getSuggestedMinimumWidth());
         height = Math.max(height, getSuggestedMinimumHeight());
         setMeasuredDimension(width, height);
+    }
+
+    /**
+     * Convert screen to source x coordinate.
+     */
+    protected float viewToSourceX(float vx) {
+        if (vTranslate == null) { return Float.NaN; }
+        return (vx - vTranslate.x) / scale;
+    }
+
+    /**
+     * Convert screen to source y coordinate.
+     */
+    protected float viewToSourceY(float vy) {
+        if (vTranslate == null) { return Float.NaN; }
+        return (vy - vTranslate.y) / scale;
+    }
+
+    /**
+     * Convert screen coordinate to source coordinate.
+     */
+    public final PointF viewToSourceCoord(PointF vxy) {
+        return viewToSourceCoord(vxy.x, vxy.y, new PointF());
+    }
+
+    /**
+     * Convert screen coordinate to source coordinate.
+     */
+    public final PointF viewToSourceCoord(float vx, float vy) {
+        return viewToSourceCoord(vx, vy, new PointF());
+    }
+
+    /**
+     * Convert screen coordinate to source coordinate.
+     */
+    public final PointF viewToSourceCoord(PointF vxy, PointF sTarget) {
+        return viewToSourceCoord(vxy.x, vxy.y, sTarget);
+    }
+
+    /**
+     * Convert screen coordinate to source coordinate.
+     */
+    public final PointF viewToSourceCoord(float vx, float vy, PointF sTarget) {
+        if (vTranslate == null) {
+            return null;
+        }
+        sTarget.set(viewToSourceX(vx), viewToSourceY(vy));
+        return sTarget;
+    }
+
+    /**
+     * Convert source to screen x coordinate.
+     */
+    protected float sourceToViewX(float sx) {
+        if (vTranslate == null) { return Float.NaN; }
+        return (sx * scale) + vTranslate.x;
+    }
+
+    /**
+     * Convert source to screen y coordinate.
+     */
+    protected float sourceToViewY(float sy) {
+        if (vTranslate == null) { return Float.NaN; }
+        return (sy * scale) + vTranslate.y;
+    }
+
+    /**
+     * Convert source coordinate to screen coordinate.
+     */
+    public final PointF sourceToViewCoord(PointF sxy) {
+        return sourceToViewCoord(sxy.x, sxy.y, new PointF());
+    }
+
+    /**
+     * Convert source coordinate to screen coordinate.
+     */
+    public final PointF sourceToViewCoord(float sx, float sy) {
+        return sourceToViewCoord(sx, sy, new PointF());
+    }
+
+    /**
+     * Convert source coordinate to screen coordinate.
+     */
+    public final PointF sourceToViewCoord(PointF sxy, PointF vTarget) {
+        return sourceToViewCoord(sxy.x, sxy.y, vTarget);
+    }
+
+    /**
+     * Convert source coordinate to screen coordinate.
+     */
+    public final PointF sourceToViewCoord(float sx, float sy, PointF vTarget) {
+        if (vTranslate == null) {
+            return null;
+        }
+        vTarget.set(sourceToViewX(sx), sourceToViewY(sy));
+        return vTarget;
+    }
+
+    /**
+     * Convert source rect to screen rect, integer values.
+     */
+    protected Rect sourceToViewRect(Rect sRect, Rect vTarget) {
+        vTarget.set(
+                (int)sourceToViewX(sRect.left),
+                (int)sourceToViewY(sRect.top),
+                (int)sourceToViewX(sRect.right),
+                (int)sourceToViewY(sRect.bottom)
+        );
+        return vTarget;
     }
 
     /**

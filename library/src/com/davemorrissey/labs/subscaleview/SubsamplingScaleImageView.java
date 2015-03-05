@@ -94,14 +94,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     private float doubleTapZoomScale = 1F;
     private int doubleTapZoomStyle = ZOOM_FOCUS_FIXED;
 
-    // Current scale and scale at start of zoom
-    private float scale;
-    private float scaleStart;
-
-    // Screen coordinate of top-left corner of source image
-    private PointF vTranslate;
-    private PointF vTranslateStart;
-
     // Source coordinate to center on, used when new position is set externally before view is ready
     private Float pendingScale;
     private PointF sPendingCenter;
@@ -1361,115 +1353,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         bitmapPaint = null;
         debugPaint = null;
         tileBgPaint = null;
-    }
-
-    /**
-     * Convert screen to source x coordinate.
-     */
-    private float viewToSourceX(float vx) {
-        if (vTranslate == null) { return Float.NaN; }
-        return (vx - vTranslate.x)/scale;
-    }
-
-    /**
-     * Convert screen to source y coordinate.
-     */
-    private float viewToSourceY(float vy) {
-        if (vTranslate == null) { return Float.NaN; }
-        return (vy - vTranslate.y)/scale;
-    }
-
-    /**
-     * Convert screen coordinate to source coordinate.
-     */
-    public final PointF viewToSourceCoord(PointF vxy) {
-        return viewToSourceCoord(vxy.x, vxy.y, new PointF());
-    }
-
-    /**
-     * Convert screen coordinate to source coordinate.
-     */
-    public final PointF viewToSourceCoord(float vx, float vy) {
-        return viewToSourceCoord(vx, vy, new PointF());
-    }
-
-    /**
-     * Convert screen coordinate to source coordinate.
-     */
-    public final PointF viewToSourceCoord(PointF vxy, PointF sTarget) {
-        return viewToSourceCoord(vxy.x, vxy.y, sTarget);
-    }
-
-    /**
-     * Convert screen coordinate to source coordinate.
-     */
-    public final PointF viewToSourceCoord(float vx, float vy, PointF sTarget) {
-        if (vTranslate == null) {
-            return null;
-        }
-        sTarget.set(viewToSourceX(vx), viewToSourceY(vy));
-        return sTarget;
-    }
-
-    /**
-     * Convert source to screen x coordinate.
-     */
-    private float sourceToViewX(float sx) {
-        if (vTranslate == null) { return Float.NaN; }
-        return (sx * scale) + vTranslate.x;
-    }
-
-    /**
-     * Convert source to screen y coordinate.
-     */
-    private float sourceToViewY(float sy) {
-        if (vTranslate == null) { return Float.NaN; }
-        return (sy * scale) + vTranslate.y;
-    }
-
-    /**
-     * Convert source coordinate to screen coordinate.
-     */
-    public final PointF sourceToViewCoord(PointF sxy) {
-        return sourceToViewCoord(sxy.x, sxy.y, new PointF());
-    }
-
-    /**
-     * Convert source coordinate to screen coordinate.
-     */
-    public final PointF sourceToViewCoord(float sx, float sy) {
-        return sourceToViewCoord(sx, sy, new PointF());
-    }
-
-    /**
-     * Convert source coordinate to screen coordinate.
-     */
-    public final PointF sourceToViewCoord(PointF sxy, PointF vTarget) {
-        return sourceToViewCoord(sxy.x, sxy.y, vTarget);
-    }
-
-    /**
-     * Convert source coordinate to screen coordinate.
-     */
-    public final PointF sourceToViewCoord(float sx, float sy, PointF vTarget) {
-        if (vTranslate == null) {
-            return null;
-        }
-        vTarget.set(sourceToViewX(sx), sourceToViewY(sy));
-        return vTarget;
-    }
-
-    /**
-     * Convert source rect to screen rect, integer values.
-     */
-    private Rect sourceToViewRect(Rect sRect, Rect vTarget) {
-        vTarget.set(
-            (int)sourceToViewX(sRect.left),
-            (int)sourceToViewY(sRect.top),
-            (int)sourceToViewX(sRect.right),
-            (int)sourceToViewY(sRect.bottom)
-        );
-        return vTarget;
     }
 
     /**
