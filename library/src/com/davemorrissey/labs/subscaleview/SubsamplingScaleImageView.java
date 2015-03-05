@@ -19,8 +19,15 @@ package com.davemorrissey.labs.subscaleview;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.TypedArray;
-import android.graphics.*;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.Paint.Style;
+import android.graphics.Point;
+import android.graphics.PointF;
+import android.graphics.Rect;
 import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -36,12 +43,18 @@ import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
+
 import com.davemorrissey.labs.subscaleview.R.styleable;
+import com.davemorrissey.labs.subscaleview.decoder.DeprecatedConstants;
 import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder;
 import com.davemorrissey.labs.subscaleview.decoder.SkiaImageRegionDecoder;
 
 import java.lang.ref.WeakReference;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Displays an image subsampled as necessary to avoid loading too much image data into memory. After a pinch to zoom in,
@@ -54,25 +67,12 @@ import java.util.*;
  * s prefixes - coordinates, translations and distances measured in source image pixels (scaled)
  */
 @SuppressWarnings("unused")
-public class SubsamplingScaleImageView extends View {
+public class SubsamplingScaleImageView extends View implements DeprecatedConstants {
 
     private static final String TAG = SubsamplingScaleImageView.class.getSimpleName();
 
     private static final String FILE_SCHEME = "file:///";
     private static final String ASSET_SCHEME = "file:///android_asset/";
-
-    /** Attempt to use EXIF information on the image to rotate it. Works for external files only. */
-    public static final int ORIENTATION_USE_EXIF = -1;
-    /** Display the image file in its native orientation. */
-    public static final int ORIENTATION_0 = 0;
-    /** Rotate the image 90 degrees clockwise. */
-    public static final int ORIENTATION_90 = 90;
-    /** Rotate the image 180 degrees. */
-    public static final int ORIENTATION_180 = 180;
-    /** Rotate the image 270 degrees clockwise. */
-    public static final int ORIENTATION_270 = 270;
-
-    private static final List<Integer> VALID_ORIENTATIONS = Arrays.asList(ORIENTATION_0, ORIENTATION_90, ORIENTATION_180, ORIENTATION_270, ORIENTATION_USE_EXIF);
 
     /** During zoom animation, keep the point of the image that was tapped in the same place, and scale the image around it. */
     public static final int ZOOM_FOCUS_FIXED = 1;
@@ -112,7 +112,7 @@ public class SubsamplingScaleImageView extends View {
     private boolean debug = false;
 
     // Image orientation setting
-    private int orientation = ORIENTATION_0;
+    private Orientation orientation = Orientation.DEGREES_0;
 
     // Max scale allowed (prevent infinite zoom)
     private float maxScale = 2F;
@@ -270,14 +270,27 @@ public class SubsamplingScaleImageView extends View {
      * Sets the image orientation. It's best to call this before setting the image file or asset, because it may waste
      * loading of tiles. However, this can be freely called at any time.
      */
-    public final void setOrientation(int orientation) {
-        if (!VALID_ORIENTATIONS.contains(orientation)) {
-            throw new IllegalArgumentException("Invalid orientation: " + orientation);
+    public void setOrientation(final Orientation orientation) {
+        if (orientation == this.orientation) {
+            return;
         }
-        this.orientation = orientation;
+        this.orientation = orientation != null ? orientation : Orientation.DEGREES_0;
         reset(false);
         invalidate();
         requestLayout();
+    }
+
+    /**
+     * Sets the image orientation. It's best to call this before setting the image file or asset, because it may waste
+     * loading of tiles. However, this can be freely called at any time.
+     * @deprecated Use {@link #setOrientation(Orientation)} instead.
+     */
+    public final void setOrientation(int orientation) {
+        final Orientation orientationValue = Orientation.fromRotationDegrees(orientation);
+        if (orientationValue == null) {
+            throw new IllegalArgumentException("Invalid orientation: " + orientation);
+        }
+        setOrientation(orientationValue);
     }
 
     /**
@@ -1411,7 +1424,7 @@ public class SubsamplingScaleImageView extends View {
      * Set scale, center and orientation from saved state.
      */
     private void restoreState(ImageViewState state) {
-        if (state != null && state.getCenter() != null && VALID_ORIENTATIONS.contains(state.getOrientation())) {
+        if (state != null && state.getCenter() != null) {
             this.orientation = state.getOrientation();
             this.pendingScale = state.getScale();
             this.sPendingCenter = state.getCenter();
@@ -1482,10 +1495,10 @@ public class SubsamplingScaleImageView extends View {
      * Determines the rotation to be applied to tiles, based on EXIF orientation or chosen setting.
      */
     private int getRequiredRotation() {
-        if (orientation == ORIENTATION_USE_EXIF) {
+        if (orientation == Orientation.EXIF) {
             return sOrientation;
         } else {
-            return orientation;
+            return orientation.rotationDegrees;
         }
     }
 
@@ -1939,7 +1952,7 @@ public class SubsamplingScaleImageView extends View {
      * the applied orientation of the image. For that, use {@link #getAppliedOrientation()}.
      */
     public final int getOrientation() {
-        return orientation;
+        return orientation.rotationDegrees;
     }
 
     /**
@@ -1956,7 +1969,7 @@ public class SubsamplingScaleImageView extends View {
      */
     public final ImageViewState getState() {
         if (vTranslate != null && sWidth > 0 && sHeight > 0) {
-            return new ImageViewState(getScale(), getCenter(), getOrientation());
+            return new ImageViewState(getScale(), getCenter(), orientation);
         }
         return null;
     }
