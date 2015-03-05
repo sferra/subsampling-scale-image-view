@@ -487,35 +487,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     }
 
     /**
-     * Measures the width and height of the view, preserving the aspect ratio of the image displayed if wrap_content is
-     * used. The image will scale within this box, not resizing the view as it is zoomed.
-     */
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int widthSpecMode = MeasureSpec.getMode(widthMeasureSpec);
-        int heightSpecMode = MeasureSpec.getMode(heightMeasureSpec);
-        int parentWidth = MeasureSpec.getSize(widthMeasureSpec);
-        int parentHeight = MeasureSpec.getSize(heightMeasureSpec);
-        boolean resizeWidth = widthSpecMode != MeasureSpec.EXACTLY;
-        boolean resizeHeight = heightSpecMode != MeasureSpec.EXACTLY;
-        int width = parentWidth;
-        int height = parentHeight;
-        if (getSourceWidth() > 0 && getSourceHeight() > 0) {
-            if (resizeWidth && resizeHeight) {
-                width = sWidth();
-                height = sHeight();
-            } else if (resizeHeight) {
-                height = (int)((((double)sHeight()/(double)sWidth()) * width));
-            } else if (resizeWidth) {
-                width = (int)((((double)sWidth()/(double)sHeight()) * height));
-            }
-        }
-        width = Math.max(width, getSuggestedMinimumWidth());
-        height = Math.max(height, getSuggestedMinimumHeight());
-        setMeasuredDimension(width, height);
-    }
-
-    /**
      * Handle touch events. One finger pans, and two finger pinch and zoom plus panning.
      */
     @Override @SuppressWarnings("deprecation")
@@ -1336,31 +1307,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
 
     }
 
-    private static class Anim {
-
-        private float scaleStart; // Scale at start of anim
-        private float scaleEnd; // Scale at end of anim (target)
-        private PointF sCenterStart; // Source center point at start
-        private PointF sCenterEnd; // Source center point at end, adjusted for pan limits
-        private PointF sCenterEndRequested; // Source center point that was requested, without adjustment
-        private PointF vFocusStart; // View point that was double tapped
-        private PointF vFocusEnd; // Where the view focal point should be moved to during the anim
-        private long duration = 500; // How long the anim takes
-        private boolean interruptible = true; // Whether the anim can be interrupted by a touch
-        private int easing = EASE_IN_OUT_QUAD; // Easing style
-        private long time = System.currentTimeMillis(); // Start time
-
-    }
-
-    private static class ScaleAndTranslate {
-        private ScaleAndTranslate(float scale, PointF vTranslate) {
-            this.scale = scale;
-            this.vTranslate = vTranslate;
-        }
-        private float scale;
-        private PointF vTranslate;
-    }
-
     /**
      * Set scale, center and orientation from saved state.
      */
@@ -1387,32 +1333,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             }
         }
         return new Point(2048, 2048);
-    }
-
-    /**
-     * Get source width taking rotation into account.
-     */
-    @SuppressWarnings("SuspiciousNameCombination")
-    private int sWidth() {
-        int rotation = getRequiredRotation();
-        if (rotation == 90 || rotation == 270) {
-            return getSourceHeight();
-        } else {
-            return getSourceWidth();
-        }
-    }
-
-    /**
-     * Get source height taking rotation into account.
-     */
-    @SuppressWarnings("SuspiciousNameCombination")
-    private int sHeight() {
-        int rotation = getRequiredRotation();
-        if (rotation == 90 || rotation == 270) {
-            return getSourceWidth();
-        } else {
-            return getSourceHeight();
-        }
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.davemorrissey.labs.subscaleview;
 
 import android.content.Context;
+import android.graphics.PointF;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -121,5 +122,85 @@ abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
         return getSourceHeight();
     }
 
+    /**
+     * Get source width taking rotation into account.
+     */
+    @SuppressWarnings("SuspiciousNameCombination")
+    protected int sWidth() {
+        int rotation = getRequiredRotation();
+        if (rotation == 90 || rotation == 270) {
+            return getSourceHeight();
+        } else {
+            return getSourceWidth();
+        }
+    }
+
+    /**
+     * Get source height taking rotation into account.
+     */
+    @SuppressWarnings("SuspiciousNameCombination")
+    protected int sHeight() {
+        int rotation = getRequiredRotation();
+        if (rotation == 90 || rotation == 270) {
+            return getSourceWidth();
+        } else {
+            return getSourceHeight();
+        }
+    }
+
+    /**
+     * Measures the width and height of the view, preserving the aspect ratio of the image displayed if wrap_content is
+     * used. The image will scale within this box, not resizing the view as it is zoomed.
+     */
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int widthSpecMode = MeasureSpec.getMode(widthMeasureSpec);
+        int heightSpecMode = MeasureSpec.getMode(heightMeasureSpec);
+        int parentWidth = MeasureSpec.getSize(widthMeasureSpec);
+        int parentHeight = MeasureSpec.getSize(heightMeasureSpec);
+        boolean resizeWidth = widthSpecMode != MeasureSpec.EXACTLY;
+        boolean resizeHeight = heightSpecMode != MeasureSpec.EXACTLY;
+        int width = parentWidth;
+        int height = parentHeight;
+        if (getSourceWidth() > 0 && getSourceHeight() > 0) {
+            if (resizeWidth && resizeHeight) {
+                width = sWidth();
+                height = sHeight();
+            } else if (resizeHeight) {
+                height = (int)((((double)sHeight()/(double)sWidth()) * width));
+            } else if (resizeWidth) {
+                width = (int)((((double)sWidth()/(double)sHeight()) * height));
+            }
+        }
+        width = Math.max(width, getSuggestedMinimumWidth());
+        height = Math.max(height, getSuggestedMinimumHeight());
+        setMeasuredDimension(width, height);
+    }
+
     protected abstract void reset(boolean isNewImage);
+
+    protected static class Anim {
+
+        public float scaleStart; // Scale at start of anim
+        public float scaleEnd; // Scale at end of anim (target)
+        public PointF sCenterStart; // Source center point at start
+        public PointF sCenterEnd; // Source center point at end, adjusted for pan limits
+        public PointF sCenterEndRequested; // Source center point that was requested, without adjustment
+        public PointF vFocusStart; // View point that was double tapped
+        public PointF vFocusEnd; // Where the view focal point should be moved to during the anim
+        public long duration = 500; // How long the anim takes
+        public boolean interruptible = true; // Whether the anim can be interrupted by a touch
+        public int easing = EASE_IN_OUT_QUAD; // Easing style
+        public long time = System.currentTimeMillis(); // Start time
+
+    }
+
+    protected static class ScaleAndTranslate {
+        public ScaleAndTranslate(float scale, PointF vTranslate) {
+            this.scale = scale;
+            this.vTranslate = vTranslate;
+        }
+        public float scale;
+        public PointF vTranslate;
+    }
 }
