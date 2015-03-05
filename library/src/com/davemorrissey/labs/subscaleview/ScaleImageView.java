@@ -41,10 +41,8 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
-import android.view.View;
 
 import com.davemorrissey.labs.subscaleview.R.styleable;
-import com.davemorrissey.labs.subscaleview.decoder.DeprecatedConstants;
 import com.davemorrissey.labs.subscaleview.decoder.ImageDecoder;
 import com.davemorrissey.labs.subscaleview.decoder.SkiaImageDecoder;
 
@@ -293,8 +291,8 @@ public class ScaleImageView extends ScaleImageViewBase {
         reset(true);
         restoreState(state);
         this.bitmap = bitmap;
-        this.sWidth = bitmap.getWidth();
-        this.sHeight = bitmap.getHeight();
+        this.sourceWidth = bitmap.getWidth();
+        this.sourceHeight = bitmap.getHeight();
         invalidate();
         requestLayout();
         readySent = true;
@@ -430,9 +428,9 @@ public class ScaleImageView extends ScaleImageViewBase {
         matrix = null;
         sRect = null;
         if (newImage) {
-            sWidth = 0;
-            sHeight = 0;
-            sOrientation = 0;
+            sourceWidth = 0;
+            sourceHeight = 0;
+            sourceOrientation = 0;
             readySent = false;
         }
         forceCenterOnNextDraw();
@@ -529,7 +527,7 @@ public class ScaleImageView extends ScaleImageViewBase {
         boolean resizeHeight = heightSpecMode != MeasureSpec.EXACTLY;
         int width = parentWidth;
         int height = parentHeight;
-        if (sWidth > 0 && sHeight > 0) {
+        if (sourceWidth > 0 && sourceHeight > 0) {
             if (resizeWidth && resizeHeight) {
                 width = sWidth();
                 height = sHeight();
@@ -791,7 +789,7 @@ public class ScaleImageView extends ScaleImageViewBase {
         createPaints();
 
         // If image or view dimensions are not known yet, abort.
-        if (sWidth == 0 || sHeight == 0 || bitmap == null || getWidth() == 0 || getHeight() == 0) {
+        if (sourceWidth == 0 || sourceHeight == 0 || bitmap == null || getWidth() == 0 || getHeight() == 0) {
             return;
         }
 
@@ -829,16 +827,16 @@ public class ScaleImageView extends ScaleImageViewBase {
         matrix.postTranslate(vTranslate.x, vTranslate.y);
 
         if (getOrientation() == ORIENTATION_180) {
-            matrix.postTranslate(scale * sWidth, scale * sHeight);
+            matrix.postTranslate(scale * sourceWidth, scale * sourceHeight);
         } else if (getOrientation() == ORIENTATION_90) {
-            matrix.postTranslate(scale * sHeight, 0);
+            matrix.postTranslate(scale * sourceHeight, 0);
         } else if (getOrientation() == ORIENTATION_270) {
-            matrix.postTranslate(0, scale * sWidth);
+            matrix.postTranslate(0, scale * sourceWidth);
         }
 
         if (tileBgPaint != null) {
             if (sRect == null) { sRect = new RectF(); }
-            sRect.set(0f, 0f, sWidth, sHeight);
+            sRect.set(0f, 0f, sourceWidth, sourceHeight);
             matrix.mapRect(sRect);
             canvas.drawRect(sRect, tileBgPaint);
         }
@@ -981,9 +979,9 @@ public class ScaleImageView extends ScaleImageViewBase {
      * Called by worker task when decoder is ready and image size and EXIF orientation is known.
      */
     private void onImageInited(Bitmap bitmap, int sWidth, int sHeight, int sOrientation) {
-        this.sWidth = sWidth;
-        this.sHeight = sHeight;
-        this.sOrientation = sOrientation;
+        this.sourceWidth = sWidth;
+        this.sourceHeight = sHeight;
+        this.sourceOrientation = sOrientation;
         this.bitmap = bitmap;
         forceCenterOnNextDraw();
         requestLayout();
@@ -1121,9 +1119,9 @@ public class ScaleImageView extends ScaleImageViewBase {
     private int sWidth() {
         int rotation = getRequiredRotation();
         if (rotation == 90 || rotation == 270) {
-            return sHeight;
+            return sourceHeight;
         } else {
-            return sWidth;
+            return sourceWidth;
         }
     }
 
@@ -1134,9 +1132,9 @@ public class ScaleImageView extends ScaleImageViewBase {
     private int sHeight() {
         int rotation = getRequiredRotation();
         if (rotation == 90 || rotation == 270) {
-            return sWidth;
+            return sourceWidth;
         } else {
-            return sHeight;
+            return sourceHeight;
         }
     }
 
@@ -1529,7 +1527,7 @@ public class ScaleImageView extends ScaleImageViewBase {
      * Call to find whether the view is initialised and ready for rendering the bitmap.
      */
     public final boolean isImageReady() {
-        return readySent && vTranslate != null && bitmap != null && sWidth > 0 && sHeight > 0;
+        return readySent && vTranslate != null && bitmap != null && sourceWidth > 0 && sourceHeight > 0;
     }
 
     /**
@@ -1537,7 +1535,7 @@ public class ScaleImageView extends ScaleImageViewBase {
      * for the apparent width.
      */
     public final int getSWidth() {
-        return sWidth;
+        return sourceWidth;
     }
 
     /**
@@ -1545,7 +1543,7 @@ public class ScaleImageView extends ScaleImageViewBase {
      * for the apparent height.
      */
     public final int getSHeight() {
-        return sHeight;
+        return sourceHeight;
     }
 
     /**
@@ -1553,7 +1551,7 @@ public class ScaleImageView extends ScaleImageViewBase {
      * the view is not ready.
      */
     public final ImageViewState getState() {
-        if (vTranslate != null && sWidth > 0 && sHeight > 0) {
+        if (vTranslate != null && sourceWidth > 0 && sourceHeight > 0) {
             return new ImageViewState(getScale(), getCenter(), orientation);
         }
         return null;

@@ -424,9 +424,9 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
                     decoder = null;
                 }
             }
-            sWidth = 0;
-            sHeight = 0;
-            sOrientation = 0;
+            sourceWidth = 0;
+            sourceHeight = 0;
+            sourceOrientation = 0;
             dimensionsReadySent = false;
             baseLayerReadySent = false;
         }
@@ -535,7 +535,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         boolean resizeHeight = heightSpecMode != MeasureSpec.EXACTLY;
         int width = parentWidth;
         int height = parentHeight;
-        if (sWidth > 0 && sHeight > 0) {
+        if (sourceWidth > 0 && sourceHeight > 0) {
             if (resizeWidth && resizeHeight) {
                 width = sWidth();
                 height = sHeight();
@@ -803,7 +803,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         createPaints();
 
         // If image or view dimensions are not known yet, abort.
-        if (sWidth == 0 || sHeight == 0 || decoder == null || getWidth() == 0 || getHeight() == 0) {
+        if (sourceWidth == 0 || sourceHeight == 0 || decoder == null || getWidth() == 0 || getHeight() == 0) {
             return;
         }
 
@@ -1179,9 +1179,9 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      */
     private void onImageInited(ImageRegionDecoder decoder, int sWidth, int sHeight, int sOrientation) {
         this.decoder = decoder;
-        this.sWidth = sWidth;
-        this.sHeight = sHeight;
-        this.sOrientation = sOrientation;
+        this.sourceWidth = sWidth;
+        this.sourceHeight = sHeight;
+        this.sourceOrientation = sOrientation;
         requestLayout();
         invalidate();
 
@@ -1432,9 +1432,9 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     private int sWidth() {
         int rotation = getRequiredRotation();
         if (rotation == 90 || rotation == 270) {
-            return sHeight;
+            return sourceHeight;
         } else {
-            return sWidth;
+            return sourceWidth;
         }
     }
 
@@ -1445,9 +1445,9 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     private int sHeight() {
         int rotation = getRequiredRotation();
         if (rotation == 90 || rotation == 270) {
-            return sWidth;
+            return sourceWidth;
         } else {
-            return sHeight;
+            return sourceHeight;
         }
     }
 
@@ -1460,11 +1460,11 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         if (getRequiredRotation() == 0) {
             target.set(sRect);
         } else if (getRequiredRotation() == 90) {
-            target.set(sRect.top, sHeight - sRect.right, sRect.bottom, sHeight - sRect.left);
+            target.set(sRect.top, sourceHeight - sRect.right, sRect.bottom, sourceHeight - sRect.left);
         } else if (getRequiredRotation() == 180) {
-            target.set(sWidth - sRect.right, sHeight - sRect.bottom, sWidth - sRect.left, sHeight - sRect.top);
+            target.set(sourceWidth - sRect.right, sourceHeight - sRect.bottom, sourceWidth - sRect.left, sourceHeight - sRect.top);
         } else {
-            target.set(sWidth - sRect.bottom, sRect.left, sWidth - sRect.top, sRect.right);
+            target.set(sourceWidth - sRect.bottom, sRect.left, sourceWidth - sRect.top, sRect.right);
         }
     }
 
@@ -1878,7 +1878,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      * once the dimensions of the image are known.
      */
     public final boolean isImageReady() {
-        return dimensionsReadySent && vTranslate != null && tileMap != null && sWidth > 0 && sHeight > 0;
+        return dimensionsReadySent && vTranslate != null && tileMap != null && sourceWidth > 0 && sourceHeight > 0;
     }
 
     /**
@@ -1902,7 +1902,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      * for the apparent width.
      */
     public final int getSWidth() {
-        return sWidth;
+        return sourceWidth;
     }
 
     /**
@@ -1910,7 +1910,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      * for the apparent height.
      */
     public final int getSHeight() {
-        return sHeight;
+        return sourceHeight;
     }
 
     /**
@@ -1918,7 +1918,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      * the view is not ready.
      */
     public final ImageViewState getState() {
-        if (vTranslate != null && sWidth > 0 && sHeight > 0) {
+        if (vTranslate != null && sourceWidth > 0 && sourceHeight > 0) {
             return new ImageViewState(getScale(), getCenter(), orientation);
         }
         return null;

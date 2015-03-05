@@ -12,9 +12,9 @@ public abstract  class ScaleImageViewBase extends View implements DeprecatedCons
     protected static final String ASSET_SCHEME = "file:///android_asset/";
 
     // Source image dimensions and orientation - dimensions relate to the unrotated image
-    protected int sWidth;
-    protected int sHeight;
-    protected int sOrientation;
+    protected int sourceWidth;
+    protected int sourceHeight;
+    protected int sourceOrientation;
 
     // Image orientation setting
     protected Orientation orientation = Orientation.DEGREES_0;
@@ -78,7 +78,7 @@ public abstract  class ScaleImageViewBase extends View implements DeprecatedCons
     // TODO merge with getAppliedOrientation()
     protected int getRequiredRotation() {
         if (orientation == Orientation.EXIF) {
-            return sOrientation;
+            return sourceOrientation;
         } else {
             return orientation.rotationDegrees;
         }
