@@ -266,6 +266,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      * loading of tiles. However, this can be freely called at any time.
      * @deprecated Use {@link #setOrientation(Orientation)} instead.
      */
+    @SuppressWarnings("deprecation")
     public final void setOrientation(int orientation) {
         super.setOrientation(orientation);
     }
