@@ -281,8 +281,7 @@ public class ScaleImageView extends ScaleImageViewBase {
         reset(true);
         restoreState(state);
         this.bitmap = bitmap;
-        this.sourceWidth = bitmap.getWidth();
-        this.sourceHeight = bitmap.getHeight();
+        setSourceSize(bitmap.getWidth(), bitmap.getHeight());
         invalidate();
         requestLayout();
         readySent = true;
@@ -418,8 +417,7 @@ public class ScaleImageView extends ScaleImageViewBase {
         matrix = null;
         sRect = null;
         if (newImage) {
-            sourceWidth = 0;
-            sourceHeight = 0;
+            setSourceSize(0, 0);
             sourceOrientation = 0;
             readySent = false;
         }
@@ -517,7 +515,7 @@ public class ScaleImageView extends ScaleImageViewBase {
         boolean resizeHeight = heightSpecMode != MeasureSpec.EXACTLY;
         int width = parentWidth;
         int height = parentHeight;
-        if (sourceWidth > 0 && sourceHeight > 0) {
+        if (getSourceWidth() > 0 && getSourceHeight() > 0) {
             if (resizeWidth && resizeHeight) {
                 width = sWidth();
                 height = sHeight();
@@ -779,7 +777,7 @@ public class ScaleImageView extends ScaleImageViewBase {
         createPaints();
 
         // If image or view dimensions are not known yet, abort.
-        if (sourceWidth == 0 || sourceHeight == 0 || bitmap == null || getWidth() == 0 || getHeight() == 0) {
+        if (getSourceWidth() == 0 || getSourceHeight() == 0 || bitmap == null || getWidth() == 0 || getHeight() == 0) {
             return;
         }
 
@@ -817,16 +815,16 @@ public class ScaleImageView extends ScaleImageViewBase {
         matrix.postTranslate(vTranslate.x, vTranslate.y);
 
         if (getOrientation() == ORIENTATION_180) {
-            matrix.postTranslate(scale * sourceWidth, scale * sourceHeight);
+            matrix.postTranslate(scale * getSourceWidth(), scale * getSourceHeight());
         } else if (getOrientation() == ORIENTATION_90) {
-            matrix.postTranslate(scale * sourceHeight, 0);
+            matrix.postTranslate(scale * getSourceHeight(), 0);
         } else if (getOrientation() == ORIENTATION_270) {
-            matrix.postTranslate(0, scale * sourceWidth);
+            matrix.postTranslate(0, scale * getSourceWidth());
         }
 
         if (tileBgPaint != null) {
             if (sRect == null) { sRect = new RectF(); }
-            sRect.set(0f, 0f, sourceWidth, sourceHeight);
+            sRect.set(0f, 0f, getSourceWidth(), getSourceHeight());
             matrix.mapRect(sRect);
             canvas.drawRect(sRect, tileBgPaint);
         }
@@ -969,8 +967,7 @@ public class ScaleImageView extends ScaleImageViewBase {
      * Called by worker task when decoder is ready and image size and EXIF orientation is known.
      */
     private void onImageInited(Bitmap bitmap, int sWidth, int sHeight, int sOrientation) {
-        this.sourceWidth = sWidth;
-        this.sourceHeight = sHeight;
+        setSourceSize(sWidth, sHeight);
         this.sourceOrientation = sOrientation;
         this.bitmap = bitmap;
         forceCenterOnNextDraw();
@@ -1109,9 +1106,9 @@ public class ScaleImageView extends ScaleImageViewBase {
     private int sWidth() {
         int rotation = getRequiredRotation();
         if (rotation == 90 || rotation == 270) {
-            return sourceHeight;
+            return getSourceHeight();
         } else {
-            return sourceWidth;
+            return getSourceWidth();
         }
     }
 
@@ -1122,9 +1119,9 @@ public class ScaleImageView extends ScaleImageViewBase {
     private int sHeight() {
         int rotation = getRequiredRotation();
         if (rotation == 90 || rotation == 270) {
-            return sourceWidth;
+            return getSourceWidth();
         } else {
-            return sourceHeight;
+            return getSourceHeight();
         }
     }
 
@@ -1517,7 +1514,7 @@ public class ScaleImageView extends ScaleImageViewBase {
      * Call to find whether the view is initialised and ready for rendering the bitmap.
      */
     public final boolean isImageReady() {
-        return readySent && vTranslate != null && bitmap != null && sourceWidth > 0 && sourceHeight > 0;
+        return readySent && vTranslate != null && bitmap != null && getSourceWidth() > 0 && getSourceHeight() > 0;
     }
 
     /**
@@ -1525,7 +1522,7 @@ public class ScaleImageView extends ScaleImageViewBase {
      * the view is not ready.
      */
     public final ImageViewState getState() {
-        if (vTranslate != null && sourceWidth > 0 && sourceHeight > 0) {
+        if (vTranslate != null && getSourceWidth() > 0 && getSourceHeight() > 0) {
             return new ImageViewState(getScale(), getCenter(), orientation);
         }
         return null;

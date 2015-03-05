@@ -12,8 +12,8 @@ public abstract  class ScaleImageViewBase extends View implements DeprecatedCons
     protected static final String ASSET_SCHEME = "file:///android_asset/";
 
     // Source image dimensions and orientation - dimensions relate to the unrotated image
-    protected int sourceWidth;
-    protected int sourceHeight;
+    private int sourceWidth;
+    private int sourceHeight;
     protected int sourceOrientation;
 
     // Image orientation setting
@@ -82,6 +82,11 @@ public abstract  class ScaleImageViewBase extends View implements DeprecatedCons
         } else {
             return orientation.rotationDegrees;
         }
+    }
+
+    protected void setSourceSize(int sourceWidth, int sourceHeight) {
+        this.sourceWidth = sourceWidth;
+        this.sourceHeight = sourceHeight;
     }
 
     /**
