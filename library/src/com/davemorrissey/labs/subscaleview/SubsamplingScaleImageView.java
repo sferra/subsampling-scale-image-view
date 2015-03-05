@@ -70,20 +70,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     // Overlay tile boundaries and other info
     private boolean debug = false;
 
-    // Max scale allowed (prevent infinite zoom)
-    private float maxScale = 2F;
-
-    // Min scale allowed (prevent infinite zoom)
-    private float minScale = minScale();
-
     // Density to reach before loading higher resolution tiles
     private int minimumTileDpi = -1;
-
-    // Pan limiting style
-    private int panLimit = PAN_LIMIT_INSIDE;
-
-    // Minimum scale type
-    private int minimumScaleType = SCALE_TYPE_CENTER_INSIDE;
 
     // Gesture detection settings
     private boolean panEnabled = true;
@@ -93,11 +81,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     // Double tap zoom behaviour
     private float doubleTapZoomScale = 1F;
     private int doubleTapZoomStyle = ZOOM_FOCUS_FIXED;
-
-    // Source coordinate to center on, used when new position is set externally before view is ready
-    private Float pendingScale;
-    private PointF sPendingCenter;
-    private PointF sRequestedCenter;
 
     // Is two-finger zooming in progress
     private boolean isZooming;
@@ -155,9 +138,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     private Paint bitmapPaint;
     private Paint debugPaint;
     private Paint tileBgPaint;
-
-    // Volatile fields used to reduce object creation
-    private ScaleAndTranslate satTemp;
 
     public SubsamplingScaleImageView(Context context, AttributeSet attr) {
         super(context, attr);
@@ -354,6 +334,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      * Reset all state before setting/changing image or setting new rotation.
      */
     protected void reset(boolean newImage) {
+        super.reset(newImage);
         scale = 0f;
         scaleStart = 0f;
         vTranslate = null;
@@ -373,7 +354,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         quickScaleLastPoint = null;
         quickScaleMoved = false;
         anim = null;
-        satTemp = null;
         if (newImage) {
             if (decoder != null) {
                 synchronized (decoderLock) {
@@ -978,81 +958,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     }
 
     /**
-     * Adjusts hypothetical future scale and translate values to keep scale within the allowed range and the image on screen. Minimum scale
-     * is set so one dimension fills the view and the image is centered on the other dimension. Used to calculate what the target of an
-     * animation should be.
-     * @param center Whether the image should be centered in the dimension it's too small to fill. While animating this can be false to avoid changes in direction as bounds are reached.
-     * @param sat The scale we want and the translation we're aiming for. The values are adjusted to be valid.
-     */
-    private void fitToBounds(boolean center, ScaleAndTranslate sat) {
-        if (panLimit == PAN_LIMIT_OUTSIDE && isImageReady()) {
-            center = false;
-        }
-
-        PointF vTranslate = sat.vTranslate;
-        float scale = limitedScale(sat.scale);
-        float scaleWidth = scale * rotatedSourceWidth();
-        float scaleHeight = scale * rotatedSourceHeight();
-
-        if (panLimit == PAN_LIMIT_CENTER && isImageReady()) {
-            vTranslate.x = Math.max(vTranslate.x, getWidth()/2 - scaleWidth);
-            vTranslate.y = Math.max(vTranslate.y, getHeight()/2 - scaleHeight);
-        } else if (center) {
-            vTranslate.x = Math.max(vTranslate.x, getWidth() - scaleWidth);
-            vTranslate.y = Math.max(vTranslate.y, getHeight() - scaleHeight);
-        } else {
-            vTranslate.x = Math.max(vTranslate.x, -scaleWidth);
-            vTranslate.y = Math.max(vTranslate.y, -scaleHeight);
-        }
-
-        // Asymmetric padding adjustments
-        float xPaddingRatio = getPaddingLeft() > 0 || getPaddingRight() > 0 ? getPaddingLeft()/(float)(getPaddingLeft() + getPaddingRight()) : 0.5f;
-        float yPaddingRatio = getPaddingTop() > 0 || getPaddingBottom() > 0 ? getPaddingTop()/(float)(getPaddingTop() + getPaddingBottom()) : 0.5f;
-
-        float maxTx;
-        float maxTy;
-        if (panLimit == PAN_LIMIT_CENTER && isImageReady()) {
-            maxTx = Math.max(0, getWidth()/2);
-            maxTy = Math.max(0, getHeight()/2);
-        } else if (center) {
-            maxTx = Math.max(0, (getWidth() - scaleWidth) * xPaddingRatio);
-            maxTy = Math.max(0, (getHeight() - scaleHeight) * yPaddingRatio);
-        } else {
-            maxTx = Math.max(0, getWidth());
-            maxTy = Math.max(0, getHeight());
-        }
-
-        vTranslate.x = Math.min(vTranslate.x, maxTx);
-        vTranslate.y = Math.min(vTranslate.y, maxTy);
-
-        sat.scale = scale;
-    }
-
-    /**
-     * Adjusts current scale and translate values to keep scale within the allowed range and the image on screen. Minimum scale
-     * is set so one dimension fills the view and the image is centered on the other dimension.
-     * @param center Whether the image should be centered in the dimension it's too small to fill. While animating this can be false to avoid changes in direction as bounds are reached.
-     */
-    private void fitToBounds(boolean center) {
-        boolean init = false;
-        if (vTranslate == null) {
-            init = true;
-            vTranslate = new PointF(0, 0);
-        }
-        if (satTemp == null) {
-            satTemp = new ScaleAndTranslate(0, new PointF(0, 0));
-        }
-        satTemp.scale = scale;
-        satTemp.vTranslate.set(vTranslate);
-        fitToBounds(center, satTemp);
-        scale = satTemp.scale;
-        vTranslate.set(satTemp.vTranslate);
-        if (init) {
-            vTranslate.set(vTranslateForSCenter(rotatedSourceWidth()/2, rotatedSourceHeight()/2, scale));
-        }
-    }
-
-    /**
      * Once source image and view dimensions are known, creates a map of sample size to tile grid.
      */
     private void initialiseTileMap(Point maxTileDimensions) {
@@ -1299,18 +1204,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     }
 
     /**
-     * Set scale, center and orientation from saved state.
-     */
-    private void restoreState(ImageViewState state) {
-        if (state != null && state.getCenter() != null) {
-            this.orientation = state.getOrientation();
-            this.pendingScale = state.getScale();
-            this.sPendingCenter = state.getCenter();
-            invalidate();
-        }
-    }
-
-    /**
      * In SDK 14 and above, use canvas max bitmap width and height instead of the default 2048, to avoid redundant tiling.
      */
     private Point getMaxBitmapDimensions(Canvas canvas) {
@@ -1353,61 +1246,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         bitmapPaint = null;
         debugPaint = null;
         tileBgPaint = null;
-    }
-
-    /**
-     * Get the translation required to place a given source coordinate at the center of the screen, with the center
-     * adjusted for asymmetric padding. Accepts the desired scale as an argument, so this is independent of current
-     * translate and scale. The result is fitted to bounds, putting the image point as near to the screen center as permitted.
-     */
-    private PointF vTranslateForSCenter(float sCenterX, float sCenterY, float scale) {
-        int vxCenter = getPaddingLeft() + (getWidth() - getPaddingRight() - getPaddingLeft())/2;
-        int vyCenter = getPaddingTop() + (getHeight() - getPaddingBottom() - getPaddingTop())/2;
-        if (satTemp == null) {
-            satTemp = new ScaleAndTranslate(0, new PointF(0, 0));
-        }
-        satTemp.scale = scale;
-        satTemp.vTranslate.set(vxCenter - (sCenterX * scale), vyCenter - (sCenterY * scale));
-        fitToBounds(true, satTemp);
-        return satTemp.vTranslate;
-    }
-
-    /**
-     * Given a requested source center and scale, calculate what the actual center will have to be to keep the image in
-     * pan limits, keeping the requested center as near to the middle of the screen as allowed.
-     */
-    private PointF limitedSCenter(float sCenterX, float sCenterY, float scale, PointF sTarget) {
-        PointF vTranslate = vTranslateForSCenter(sCenterX, sCenterY, scale);
-        int vxCenter = getPaddingLeft() + (getWidth() - getPaddingRight() - getPaddingLeft())/2;
-        int vyCenter = getPaddingTop() + (getHeight() - getPaddingBottom() - getPaddingTop())/2;
-        float sx = (vxCenter - vTranslate.x)/scale;
-        float sy = (vyCenter - vTranslate.y)/scale;
-        sTarget.set(sx, sy);
-        return sTarget;
-    }
-
-    /**
-     * Returns the minimum allowed scale.
-     */
-    private float minScale() {
-        int vPadding = getPaddingBottom() + getPaddingTop();
-        int hPadding = getPaddingLeft() + getPaddingRight();
-        if (minimumScaleType == SCALE_TYPE_CENTER_CROP) {
-            return Math.max((getWidth() - hPadding) / (float) rotatedSourceWidth(), (getHeight() - vPadding) / (float) rotatedSourceHeight());
-        } else if (minimumScaleType == SCALE_TYPE_CUSTOM && minScale > 0) {
-            return minScale;
-        } else {
-            return Math.min((getWidth() - hPadding) / (float) rotatedSourceWidth(), (getHeight() - vPadding) / (float) rotatedSourceHeight());
-        }
-    }
-
-    /**
-     * Adjust a requested scale to be within the allowed limits.
-     */
-    private float limitedScale(float targetScale) {
-        targetScale = Math.max(minScale(), targetScale);
-        targetScale = Math.min(maxScale, targetScale);
-        return targetScale;
     }
 
     /**
@@ -1474,89 +1312,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         this.decoderClass = decoderClass;
     }
 
-    /**
-     * Set the pan limiting style. See static fields. Normally {@link #PAN_LIMIT_INSIDE} is best, for image galleries.
-     */
-    public final void setPanLimit(int panLimit) {
-        if (!VALID_PAN_LIMITS.contains(panLimit)) {
-            throw new IllegalArgumentException("Invalid pan limit: " + panLimit);
-        }
-        this.panLimit = panLimit;
-        if (isImageReady()) {
-            fitToBounds(true);
-            invalidate();
-        }
-    }
-
-    /**
-     * Set the minimum scale type. See static fields. Normally {@link #SCALE_TYPE_CENTER_INSIDE} is best, for image galleries.
-     */
-    public final void setMinimumScaleType(int scaleType) {
-        if (!VALID_SCALE_TYPES.contains(scaleType)) {
-            throw new IllegalArgumentException("Invalid scale type: " + scaleType);
-        }
-        this.minimumScaleType = scaleType;
-        if (isImageReady()) {
-            fitToBounds(true);
-            invalidate();
-        }
-    }
-
-    /**
-     * Set the maximum scale allowed. A value of 1 means 1:1 pixels at maximum scale. You may wish to set this according
-     * to screen density - on a retina screen, 1:1 may still be too small. Consider using {@link #setMinimumDpi(int)},
-     * which is density aware.
-     */
-    public final void setMaxScale(float maxScale) {
-        this.maxScale = maxScale;
-    }
-
-    /**
-     * Set the minimum scale allowed. A value of 1 means 1:1 pixels at minimum scale. You may wish to set this according
-     * to screen density. Consider using {@link #setMaximumDpi(int)}, which is density aware.
-     */
-    public final void setMinScale(float minScale) {
-        this.minScale = minScale;
-    }
-
-    /**
-     * This is a screen density aware alternative to {@link #setMaxScale(float)}; it allows you to express the maximum
-     * allowed scale in terms of the minimum pixel density. This avoids the problem of 1:1 scale still being
-     * too small on a high density screen. A sensible starting point is 160 - the default used by this view.
-     * @param dpi Source image pixel density at maximum zoom.
-     */
-    public final void setMinimumDpi(int dpi) {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        float averageDpi = (metrics.xdpi + metrics.ydpi)/2;
-        setMaxScale(averageDpi/dpi);
-    }
-
-    /**
-     * This is a screen density aware alternative to {@link #setMinScale(float)}; it allows you to express the minimum
-     * allowed scale in terms of the maximum pixel density.
-     * @param dpi Source image pixel density at minimum zoom.
-     */
-    public final void setMaximumDpi(int dpi) {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        float averageDpi = (metrics.xdpi + metrics.ydpi)/2;
-        setMinScale(averageDpi/dpi);
-    }
-
-    /**
-     * Returns the maximum allowed scale.
-     */
-    public float getMaxScale() {
-        return maxScale;
-    }
-
-    /**
-     * Returns the minimum allowed scale.
-     */
-    public final float getMinScale() {
-        return minScale();
-    }
-
-    /**
+     /**
      * By default, image tiles are at least as high resolution as the screen. For a retina screen this may not be
      * necessary, and may increase the likelihood of an OutOfMemoryError. This method sets a DPI at which higher
      * resolution tiles should be loaded. Using a lower number will on average use less memory but result in a lower
@@ -1572,51 +1328,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             reset(false);
             invalidate();
         }
-    }
-
-    /**
-     * Returns the source point at the center of the view.
-     */
-    public final PointF getCenter() {
-        int mX = getWidth()/2;
-        int mY = getHeight()/2;
-        return viewToSourceCoord(mX, mY);
-    }
-
-    /**
-     * Returns the current scale value.
-     */
-    public final float getScale() {
-        return scale;
-    }
-
-    /**
-     * Externally change the scale and translation of the source image. This may be used with getCenter() and getScale()
-     * to restore the scale and zoom after a screen rotate.
-     * @param scale New scale to set.
-     * @param sCenter New source image coordinate to center on the screen, subject to boundaries.
-     */
-    public final void setScaleAndCenter(float scale, PointF sCenter) {
-        this.anim = null;
-        this.pendingScale = scale;
-        this.sPendingCenter = sCenter;
-        this.sRequestedCenter = sCenter;
-        invalidate();
-    }
-
-    /**
-     * Fully zoom out and return the image to the middle of the screen. This might be useful if you have a view pager
-     * and want images to be reset when the user has moved to another page.
-     */
-    public final void resetScaleAndCenter() {
-        this.anim = null;
-        this.pendingScale = limitedScale(0);
-        if (isImageReady()) {
-            this.sPendingCenter = new PointF(rotatedSourceWidth()/2, rotatedSourceHeight()/2);
-        } else {
-            this.sPendingCenter = new PointF(0, 0);
-        }
-        invalidate();
     }
 
     /**
@@ -1652,17 +1363,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      */
     public final boolean isBaseLayerReady() {
         return baseLayerReadySent;
-    }
-
-    /**
-     * Get the current state of the view (scale, center, orientation) for restoration after rotate. Will return null if
-     * the view is not ready.
-     */
-    public final ImageViewState getState() {
-        if (vTranslate != null && getSourceWidth() > 0 && getSourceHeight() > 0) {
-            return new ImageViewState(getScale(), getCenter(), orientation);
-        }
-        return null;
     }
 
     /**
