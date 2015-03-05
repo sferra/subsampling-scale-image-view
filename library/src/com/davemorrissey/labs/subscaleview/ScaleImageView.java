@@ -560,8 +560,8 @@ public class ScaleImageView extends ScaleImageViewBase {
                                 vTranslate.y = (getHeight()/2) - (scale * sRequestedCenter.y);
                             } else {
                                 // With no requested center, scale around the image center.
-                                vTranslate.x = (getWidth()/2) - (scale * (sWidth()/2));
-                                vTranslate.y = (getHeight()/2) - (scale * (sHeight()/2));
+                                vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
+                                vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
                             }
 
                             fitToBounds(true);
@@ -600,8 +600,8 @@ public class ScaleImageView extends ScaleImageViewBase {
                                 vTranslate.y = (getHeight()/2) - (scale * sRequestedCenter.y);
                             } else {
                                 // With no requested center, scale around the image center.
-                                vTranslate.x = (getWidth()/2) - (scale * (sWidth()/2));
-                                vTranslate.y = (getHeight()/2) - (scale * (sHeight()/2));
+                                vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
+                                vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
                             }
                         }
 
@@ -836,8 +836,8 @@ public class ScaleImageView extends ScaleImageViewBase {
 
         PointF vTranslate = sat.vTranslate;
         float scale = limitedScale(sat.scale);
-        float scaleWidth = scale * sWidth();
-        float scaleHeight = scale * sHeight();
+        float scaleWidth = scale * rotatedSourceWidth();
+        float scaleHeight = scale * rotatedSourceHeight();
 
         if (panLimit == PAN_LIMIT_CENTER && isImageReady()) {
             vTranslate.x = Math.max(vTranslate.x, getWidth()/2 - scaleWidth);
@@ -893,7 +893,7 @@ public class ScaleImageView extends ScaleImageViewBase {
         scale = satTemp.scale;
         vTranslate.set(satTemp.vTranslate);
         if (init) {
-            vTranslate.set(vTranslateForSCenter(sWidth()/2, sHeight()/2, scale));
+            vTranslate.set(vTranslateForSCenter(rotatedSourceWidth()/2, rotatedSourceHeight()/2, scale));
         }
     }
 
@@ -1167,11 +1167,11 @@ public class ScaleImageView extends ScaleImageViewBase {
         int vPadding = getPaddingBottom() + getPaddingTop();
         int hPadding = getPaddingLeft() + getPaddingRight();
         if (minimumScaleType == SCALE_TYPE_CENTER_CROP) {
-            return Math.max((getWidth() - hPadding) / (float) sWidth(), (getHeight() - vPadding) / (float) sHeight());
+            return Math.max((getWidth() - hPadding) / (float) rotatedSourceWidth(), (getHeight() - vPadding) / (float) rotatedSourceHeight());
         } else if (minimumScaleType == SCALE_TYPE_CUSTOM && minScale > 0) {
             return minScale;
         } else {
-            return Math.min((getWidth() - hPadding) / (float) sWidth(), (getHeight() - vPadding) / (float) sHeight());
+            return Math.min((getWidth() - hPadding) / (float) rotatedSourceWidth(), (getHeight() - vPadding) / (float) rotatedSourceHeight());
         }
     }
 
@@ -1368,7 +1368,7 @@ public class ScaleImageView extends ScaleImageViewBase {
         this.anim = null;
         this.pendingScale = limitedScale(0);
         if (isImageReady()) {
-            this.sPendingCenter = new PointF(sWidth()/2, sHeight()/2);
+            this.sPendingCenter = new PointF(rotatedSourceWidth()/2, rotatedSourceHeight()/2);
         } else {
             this.sPendingCenter = new PointF(0, 0);
         }
@@ -1429,8 +1429,8 @@ public class ScaleImageView extends ScaleImageViewBase {
     public final void setPanEnabled(boolean panEnabled) {
         this.panEnabled = panEnabled;
         if (!panEnabled && vTranslate != null) {
-            vTranslate.x = (getWidth()/2) - (scale * (sWidth()/2));
-            vTranslate.y = (getHeight()/2) - (scale * (sHeight()/2));
+            vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
+            vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
             if (isImageReady()) {
                 invalidate();
             }

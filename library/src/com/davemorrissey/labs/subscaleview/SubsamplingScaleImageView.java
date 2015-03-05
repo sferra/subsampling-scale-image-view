@@ -581,8 +581,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
                                 vTranslate.y = (getHeight()/2) - (scale * sRequestedCenter.y);
                             } else {
                                 // With no requested center, scale around the image center.
-                                vTranslate.x = (getWidth()/2) - (scale * (sWidth()/2));
-                                vTranslate.y = (getHeight()/2) - (scale * (sHeight()/2));
+                                vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
+                                vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
                             }
 
                             fitToBounds(true);
@@ -622,8 +622,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
                                 vTranslate.y = (getHeight()/2) - (scale * sRequestedCenter.y);
                             } else {
                                 // With no requested center, scale around the image center.
-                                vTranslate.x = (getWidth()/2) - (scale * (sWidth()/2));
-                                vTranslate.y = (getHeight()/2) - (scale * (sHeight()/2));
+                                vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
+                                vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
                             }
                         }
 
@@ -955,8 +955,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             adjustedScale = (minimumTileDpi/averageDpi) * scale;
         }
 
-        int reqWidth = (int)(sWidth() * adjustedScale);
-        int reqHeight = (int)(sHeight() * adjustedScale);
+        int reqWidth = (int)(rotatedSourceWidth() * adjustedScale);
+        int reqHeight = (int)(rotatedSourceHeight() * adjustedScale);
 
         // Raw height and width of image
         int inSampleSize = 1;
@@ -964,11 +964,11 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             return 32;
         }
 
-        if (sHeight() > reqHeight || sWidth() > reqWidth) {
+        if (rotatedSourceHeight() > reqHeight || rotatedSourceWidth() > reqWidth) {
 
             // Calculate ratios of height and width to requested height and width
-            final int heightRatio = Math.round((float) sHeight() / (float) reqHeight);
-            final int widthRatio = Math.round((float) sWidth() / (float) reqWidth);
+            final int heightRatio = Math.round((float) rotatedSourceHeight() / (float) reqHeight);
+            final int widthRatio = Math.round((float) rotatedSourceWidth() / (float) reqWidth);
 
             // Choose the smallest ratio as inSampleSize value, this will guarantee
             // a final image with both dimensions larger than or equal to the
@@ -999,8 +999,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
 
         PointF vTranslate = sat.vTranslate;
         float scale = limitedScale(sat.scale);
-        float scaleWidth = scale * sWidth();
-        float scaleHeight = scale * sHeight();
+        float scaleWidth = scale * rotatedSourceWidth();
+        float scaleHeight = scale * rotatedSourceHeight();
 
         if (panLimit == PAN_LIMIT_CENTER && isImageReady()) {
             vTranslate.x = Math.max(vTranslate.x, getWidth()/2 - scaleWidth);
@@ -1056,7 +1056,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         scale = satTemp.scale;
         vTranslate.set(satTemp.vTranslate);
         if (init) {
-            vTranslate.set(vTranslateForSCenter(sWidth()/2, sHeight()/2, scale));
+            vTranslate.set(vTranslateForSCenter(rotatedSourceWidth()/2, rotatedSourceHeight()/2, scale));
         }
     }
 
@@ -1069,18 +1069,18 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         int xTiles = 1;
         int yTiles = 1;
         while (true) {
-            int sTileWidth = sWidth()/xTiles;
-            int sTileHeight = sHeight()/yTiles;
+            int sTileWidth = rotatedSourceWidth()/xTiles;
+            int sTileHeight = rotatedSourceHeight()/yTiles;
             int subTileWidth = sTileWidth/sampleSize;
             int subTileHeight = sTileHeight/sampleSize;
             while (subTileWidth > maxTileDimensions.x || (subTileWidth > getWidth() * 1.25 && sampleSize < fullImageSampleSize)) {
                 xTiles += 1;
-                sTileWidth = sWidth()/xTiles;
+                sTileWidth = rotatedSourceWidth()/xTiles;
                 subTileWidth = sTileWidth/sampleSize;
             }
             while (subTileHeight > maxTileDimensions.y || (subTileHeight > getHeight() * 1.25 && sampleSize < fullImageSampleSize)) {
                 yTiles += 1;
-                sTileHeight = sHeight()/yTiles;
+                sTileHeight = rotatedSourceHeight()/yTiles;
                 subTileHeight = sTileHeight/sampleSize;
             }
             List<Tile> tileGrid = new ArrayList<Tile>(xTiles * yTiles);
@@ -1510,11 +1510,11 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         int vPadding = getPaddingBottom() + getPaddingTop();
         int hPadding = getPaddingLeft() + getPaddingRight();
         if (minimumScaleType == SCALE_TYPE_CENTER_CROP) {
-            return Math.max((getWidth() - hPadding) / (float) sWidth(), (getHeight() - vPadding) / (float) sHeight());
+            return Math.max((getWidth() - hPadding) / (float) rotatedSourceWidth(), (getHeight() - vPadding) / (float) rotatedSourceHeight());
         } else if (minimumScaleType == SCALE_TYPE_CUSTOM && minScale > 0) {
             return minScale;
         } else {
-            return Math.min((getWidth() - hPadding) / (float) sWidth(), (getHeight() - vPadding) / (float) sHeight());
+            return Math.min((getWidth() - hPadding) / (float) rotatedSourceWidth(), (getHeight() - vPadding) / (float) rotatedSourceHeight());
         }
     }
 
@@ -1729,7 +1729,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         this.anim = null;
         this.pendingScale = limitedScale(0);
         if (isImageReady()) {
-            this.sPendingCenter = new PointF(sWidth()/2, sHeight()/2);
+            this.sPendingCenter = new PointF(rotatedSourceWidth()/2, rotatedSourceHeight()/2);
         } else {
             this.sPendingCenter = new PointF(0, 0);
         }
@@ -1809,8 +1809,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     public final void setPanEnabled(boolean panEnabled) {
         this.panEnabled = panEnabled;
         if (!panEnabled && vTranslate != null) {
-            vTranslate.x = (getWidth()/2) - (scale * (sWidth()/2));
-            vTranslate.y = (getHeight()/2) - (scale * (sHeight()/2));
+            vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
+            vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
             if (isImageReady()) {
                 refreshRequiredTiles(true);
                 invalidate();

@@ -126,8 +126,7 @@ abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
     /**
      * Get source width taking rotation into account.
      */
-    @SuppressWarnings("SuspiciousNameCombination")
-    protected int sWidth() {
+    protected int rotatedSourceWidth() {
         int rotation = getRequiredRotation();
         if (rotation == 90 || rotation == 270) {
             return getSourceHeight();
@@ -139,8 +138,7 @@ abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
     /**
      * Get source height taking rotation into account.
      */
-    @SuppressWarnings("SuspiciousNameCombination")
-    protected int sHeight() {
+    protected int rotatedSourceHeight() {
         int rotation = getRequiredRotation();
         if (rotation == 90 || rotation == 270) {
             return getSourceWidth();
@@ -165,12 +163,12 @@ abstract  class ScaleImageViewBase extends View implements DeprecatedConstants {
         int height = parentHeight;
         if (getSourceWidth() > 0 && getSourceHeight() > 0) {
             if (resizeWidth && resizeHeight) {
-                width = sWidth();
-                height = sHeight();
+                width = rotatedSourceWidth();
+                height = rotatedSourceHeight();
             } else if (resizeHeight) {
-                height = (int)((((double)sHeight()/(double)sWidth()) * width));
+                height = (int)((((double) rotatedSourceHeight()/(double) rotatedSourceWidth()) * width));
             } else if (resizeWidth) {
-                width = (int)((((double)sWidth()/(double)sHeight()) * height));
+                width = (int)((((double) rotatedSourceWidth()/(double) rotatedSourceHeight()) * height));
             }
         }
         width = Math.max(width, getSuggestedMinimumWidth());
