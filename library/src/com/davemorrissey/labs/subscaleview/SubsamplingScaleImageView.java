@@ -42,10 +42,8 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
-import android.view.View;
 
 import com.davemorrissey.labs.subscaleview.R.styleable;
-import com.davemorrissey.labs.subscaleview.decoder.DeprecatedConstants;
 import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder;
 import com.davemorrissey.labs.subscaleview.decoder.SkiaImageRegionDecoder;
 
@@ -67,12 +65,9 @@ import java.util.Map;
  * s prefixes - coordinates, translations and distances measured in source image pixels (scaled)
  */
 @SuppressWarnings("unused")
-public class SubsamplingScaleImageView extends View implements DeprecatedConstants {
+public class SubsamplingScaleImageView extends ScaleImageViewBase {
 
     private static final String TAG = SubsamplingScaleImageView.class.getSimpleName();
-
-    private static final String FILE_SCHEME = "file:///";
-    private static final String ASSET_SCHEME = "file:///android_asset/";
 
     /** During zoom animation, keep the point of the image that was tapped in the same place, and scale the image around it. */
     public static final int ZOOM_FOCUS_FIXED = 1;
@@ -111,9 +106,6 @@ public class SubsamplingScaleImageView extends View implements DeprecatedConstan
     // Overlay tile boundaries and other info
     private boolean debug = false;
 
-    // Image orientation setting
-    private Orientation orientation = Orientation.DEGREES_0;
-
     // Max scale allowed (prevent infinite zoom)
     private float maxScale = 2F;
 
@@ -150,11 +142,6 @@ public class SubsamplingScaleImageView extends View implements DeprecatedConstan
     private Float pendingScale;
     private PointF sPendingCenter;
     private PointF sRequestedCenter;
-
-    // Source image dimensions and orientation - dimensions relate to the unrotated image
-    private int sWidth;
-    private int sHeight;
-    private int sOrientation;
 
     // Is two-finger zooming in progress
     private boolean isZooming;
@@ -271,13 +258,7 @@ public class SubsamplingScaleImageView extends View implements DeprecatedConstan
      * loading of tiles. However, this can be freely called at any time.
      */
     public void setOrientation(final Orientation orientation) {
-        if (orientation == this.orientation) {
-            return;
-        }
-        this.orientation = orientation != null ? orientation : Orientation.DEGREES_0;
-        reset(false);
-        invalidate();
-        requestLayout();
+        super.setOrientation(orientation);
     }
 
     /**
@@ -286,11 +267,7 @@ public class SubsamplingScaleImageView extends View implements DeprecatedConstan
      * @deprecated Use {@link #setOrientation(Orientation)} instead.
      */
     public final void setOrientation(int orientation) {
-        final Orientation orientationValue = Orientation.fromRotationDegrees(orientation);
-        if (orientationValue == null) {
-            throw new IllegalArgumentException("Invalid orientation: " + orientation);
-        }
-        setOrientation(orientationValue);
+        super.setOrientation(orientation);
     }
 
     /**
@@ -419,7 +396,7 @@ public class SubsamplingScaleImageView extends View implements DeprecatedConstan
     /**
      * Reset all state before setting/changing image or setting new rotation.
      */
-    private void reset(boolean newImage) {
+    protected void reset(boolean newImage) {
         scale = 0f;
         scaleStart = 0f;
         vTranslate = null;
@@ -1492,17 +1469,6 @@ public class SubsamplingScaleImageView extends View implements DeprecatedConstan
     }
 
     /**
-     * Determines the rotation to be applied to tiles, based on EXIF orientation or chosen setting.
-     */
-    private int getRequiredRotation() {
-        if (orientation == Orientation.EXIF) {
-            return sOrientation;
-        } else {
-            return orientation.rotationDegrees;
-        }
-    }
-
-    /**
      * Pythagoras distance between two points.
      */
     private float distance(float x0, float x1, float y0, float y1) {
@@ -1945,22 +1911,6 @@ public class SubsamplingScaleImageView extends View implements DeprecatedConstan
      */
     public final int getSHeight() {
         return sHeight;
-    }
-
-    /**
-     * Returns the orientation setting. This can return {@link #ORIENTATION_USE_EXIF}, in which case it doesn't tell you
-     * the applied orientation of the image. For that, use {@link #getAppliedOrientation()}.
-     */
-    public final int getOrientation() {
-        return orientation.rotationDegrees;
-    }
-
-    /**
-     * Returns the actual orientation of the image relative to the source file. This will be based on the source file's
-     * EXIF orientation if you're using ORIENTATION_USE_EXIF. Values are 0, 90, 180, 270.
-     */
-    public final int getAppliedOrientation() {
-        return getRequiredRotation();
     }
 
     /**
