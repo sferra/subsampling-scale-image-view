@@ -2161,44 +2161,14 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
 
     /**
      * An event listener, allowing subclasses and activities to be notified of significant events.
+     * @deprecated Use {@link com.davemorrissey.labs.subscaleview.ImageSizeDecoderListener} and {@link com.davemorrissey.labs.subscaleview.TileImageLoaderListener} instead.
      */
-    public static interface OnImageEventListener {
-
-        /**
-         * Called when the dimensions of the image are known. This occurs when the bitmap region decoder
-         * has initialised, but before the base layer tiles have been decoded. The view will be briefly
-         * blank but scale and translate will be calculated and ready for use to draw overlays.
-         */
-        void onImageReady();
-
-        /**
-         * Called when the lowest resolution base layer of tiles are loaded and about to be rendered,
-         * in other words the view will no longer be blank. You can use this event as a trigger to
-         * display overlays, remove loading animations etc.
-         */
-        void onBaseLayerReady();
-
-        /**
-         * Called when the dimensions of an image file could not be determined. This method cannot be
-         * relied upon; certain encoding types of supported image formats can result in corrupt or
-         * blank images being loaded and displayed with no detectable error.
-         * @param e The exception thrown. This error is also logged by the view.
-         */
-        void onInitialisationError(Exception e);
-
-        /**
-         * Called when an image tile could not be loaded. This method cannot be relied upon; certain
-         * encoding types of supported image formats can result in corrupt or blank images being loaded
-         * and displayed with no detectable error. Most cases where an unsupported file is used will
-         * result in an error caught by {@link #onInitialisationError(Exception)}.
-         * @param e The exception thrown. This error is logged by the view.
-         */
-        void onTileLoadError(Exception e);
-
+    public static interface OnImageEventListener extends DeprecatedImageEventListener, TileImageLoaderListener {
     }
 
     /**
      * Default implementation of {@link OnImageEventListener} for extension. This does nothing in any method.
+     * @deprecated Do not use this class in new code.
      */
     public class DefaultOnImageEventListener implements OnImageEventListener {
 

@@ -1780,33 +1780,18 @@ public class ScaleImageView extends ScaleImageViewBase {
 
     /**
      * An event listener, allowing subclasses and activities to be notified of significant events.
+     * @deprecated Use {@link com.davemorrissey.labs.subscaleview.ImageSizeDecoderListener} instead.
      */
-    public interface OnImageEventListener {
-
-        /**
-         * Called when the dimensions of the image are known and the bitmap has been loaded ready for
-         * rendering in the next draw.
-         */
-        void onImageReady();
-
-        /**
-         * Called when the image file could not be loaded. This method cannot be relied upon; certain
-         * encoding types of supported image formats can result in corrupt or blank images being loaded
-         * and displayed with no detectable error.
-         * @param e The exception thrown. This error is also logged by the view.
-         */
-        void onInitialisationError(Exception e);
-
+    public interface OnImageEventListener extends DeprecatedImageEventListener {
     }
 
     /**
      * Default implementation of {@link OnImageEventListener} for extension. This does nothing in any method.
+     * @deprecated Do not use this class in new code.
      */
     public class DefaultOnImageEventListener implements OnImageEventListener {
 
         @Override public void onImageReady() { }
         @Override public void onInitialisationError(Exception e) { }
-
     }
-
 }
