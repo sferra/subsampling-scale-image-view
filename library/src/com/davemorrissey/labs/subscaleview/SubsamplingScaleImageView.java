@@ -62,7 +62,6 @@ import java.util.Map;
  * v prefixes - coordinates, translations and distances measured in screen (view) pixels
  * s prefixes - coordinates, translations and distances measured in source image pixels (scaled)
  */
-@SuppressWarnings("unused")
 public class SubsamplingScaleImageView extends ScaleImageViewBase {
 
     private static final String TAG = SubsamplingScaleImageView.class.getSimpleName();

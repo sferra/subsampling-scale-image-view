@@ -56,7 +56,6 @@ import java.lang.ref.WeakReference;
  * v prefixes - coordinates, translations and distances measured in screen (view) pixels
  * s prefixes - coordinates, translations and distances measured in source image pixels (scaled)
  */
-@SuppressWarnings("unused")
 public class ScaleImageView extends ScaleImageViewBase {
 
     private static final String TAG = ScaleImageView.class.getSimpleName();
