@@ -19,8 +19,8 @@ import android.view.View;
 
 public abstract  class ScaleImageViewBase<ImageDataSource> extends View implements DeprecatedConstants {
 
-    protected static final String FILE_SCHEME = "file:///";
-    protected static final String ASSET_SCHEME = "file:///android_asset/";
+    public static final String FILE_SCHEME = "file:///";
+    public static final String ASSET_SCHEME = "file:///android_asset/";
 
     protected ImageDataSource imageDataSource;
 
@@ -90,7 +90,7 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
     private boolean quickScaleMoved;
 
     // Scale and center animation tracking
-    protected Anim anim;
+    protected Animation animation;
 
     private OnLongClickListener onLongClickListener;
     private ImageSizeDecoderListener imageSizeListener;
@@ -681,7 +681,7 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
      * @param sCenter New source image coordinate to center on the screen, subject to boundaries.
      */
     public final void setScaleAndCenter(float scale, PointF sCenter) {
-        this.anim = null;
+        this.animation = null;
         this.pendingScale = scale;
         this.sPendingCenter = sCenter;
         this.sRequestedCenter = sCenter;
@@ -693,7 +693,7 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
      * and want images to be reset when the user has moved to another page.
      */
     public final void resetScaleAndCenter() {
-        this.anim = null;
+        this.animation = null;
         this.pendingScale = limitedScale(0);
         if (isImageReady()) {
             this.sPendingCenter = new PointF(rotatedSourceWidth()/2, rotatedSourceHeight()/2);
@@ -909,7 +909,7 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
         pendingScale = 0f;
         sPendingCenter = null;
         sRequestedCenter = null;
-        anim = null;
+        animation = null;
         isZooming = false;
         isPanning = false;
         isQuickScaling = false;
@@ -996,24 +996,24 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
 
     protected void updateAnimation() {
         // If animating scale, calculate current scale and center with easing equations
-        if (anim != null) {
-            long scaleElapsed = System.currentTimeMillis() - anim.time;
-            boolean finished = scaleElapsed > anim.duration;
-            scaleElapsed = Math.min(scaleElapsed, anim.duration);
-            scale = ease(anim.easing, scaleElapsed, anim.scaleStart, anim.scaleEnd - anim.scaleStart, anim.duration);
+        if (animation != null) {
+            long scaleElapsed = System.currentTimeMillis() - animation.time;
+            boolean finished = scaleElapsed > animation.duration;
+            scaleElapsed = Math.min(scaleElapsed, animation.duration);
+            scale = ease(animation.easing, scaleElapsed, animation.scaleStart, animation.scaleEnd - animation.scaleStart, animation.duration);
 
             // Apply required animation to the focal point
-            float vFocusNowX = ease(anim.easing, scaleElapsed, anim.vFocusStart.x, anim.vFocusEnd.x - anim.vFocusStart.x, anim.duration);
-            float vFocusNowY = ease(anim.easing, scaleElapsed, anim.vFocusStart.y, anim.vFocusEnd.y - anim.vFocusStart.y, anim.duration);
+            float vFocusNowX = ease(animation.easing, scaleElapsed, animation.vFocusStart.x, animation.vFocusEnd.x - animation.vFocusStart.x, animation.duration);
+            float vFocusNowY = ease(animation.easing, scaleElapsed, animation.vFocusStart.y, animation.vFocusEnd.y - animation.vFocusStart.y, animation.duration);
             // Find out where the focal point is at this scale and adjust its position to follow the animation path
-            vTranslate.x -= sourceToViewX(anim.sCenterEnd.x) - vFocusNowX;
-            vTranslate.y -= sourceToViewY(anim.sCenterEnd.y) - vFocusNowY;
+            vTranslate.x -= sourceToViewX(animation.sCenterEnd.x) - vFocusNowX;
+            vTranslate.y -= sourceToViewY(animation.sCenterEnd.y) - vFocusNowY;
 
             // For translate anims, showing the image non-centered is never allowed, for scaling anims it is during the animation.
-            fitToBounds(finished || (anim.scaleStart == anim.scaleEnd));
+            fitToBounds(finished || (animation.scaleStart == animation.scaleEnd));
             refreshImageData(finished);
             if (finished) {
-                anim = null;
+                animation = null;
             }
             invalidate();
         }
@@ -1027,10 +1027,10 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
         PointF center = getCenter();
         canvas.drawText("Source center: " + String.format("%.2f", center.x) + ":" + String.format("%.2f", center.y), 5, 55, debugPaint);
 
-        if (anim != null) {
-            PointF vCenterStart = sourceToViewCoord(anim.sCenterStart);
-            PointF vCenterEndRequested = sourceToViewCoord(anim.sCenterEndRequested);
-            PointF vCenterEnd = sourceToViewCoord(anim.sCenterEnd);
+        if (animation != null) {
+            PointF vCenterStart = sourceToViewCoord(animation.sCenterStart);
+            PointF vCenterEndRequested = sourceToViewCoord(animation.sCenterEndRequested);
+            PointF vCenterEnd = sourceToViewCoord(animation.sCenterEnd);
             canvas.drawCircle(vCenterStart.x, vCenterStart.y, 10, debugPaint);
             canvas.drawCircle(vCenterEndRequested.x, vCenterEndRequested.y, 20, debugPaint);
             canvas.drawCircle(vCenterEnd.x, vCenterEnd.y, 25, debugPaint);
@@ -1044,11 +1044,11 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
     @Override @SuppressWarnings("deprecation")
     public boolean onTouchEvent(@NonNull MotionEvent event) {
         // During non-interruptible anims, ignore all touch events
-        if (anim != null && !anim.interruptible) {
+        if (animation != null && !animation.interruptible) {
             getParent().requestDisallowInterceptTouchEvent(true);
             return true;
         } else {
-            anim = null;
+            animation = null;
         }
 
         // Abort if not ready
@@ -1070,7 +1070,7 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_POINTER_1_DOWN:
             case MotionEvent.ACTION_POINTER_2_DOWN:
-                anim = null;
+                animation = null;
                 getParent().requestDisallowInterceptTouchEvent(true);
                 maxTouchCount = Math.max(maxTouchCount, touchCount);
                 if (touchCount >= 2) {
@@ -1512,32 +1512,32 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
             int vyCenter = getPaddingTop() + (getHeight() - getPaddingBottom() - getPaddingTop())/2;
             float targetScale = limitedScale(this.targetScale);
             PointF targetSCenter = panLimited ? limitedSCenter(this.targetSCenter.x, this.targetSCenter.y, targetScale, new PointF()) : this.targetSCenter;
-            anim = new Anim();
-            anim.scaleStart = scale;
-            anim.scaleEnd = targetScale;
-            anim.time = System.currentTimeMillis();
-            anim.sCenterEndRequested = targetSCenter;
-            anim.sCenterStart = getCenter();
-            anim.sCenterEnd = targetSCenter;
-            anim.vFocusStart = sourceToViewCoord(targetSCenter);
-            anim.vFocusEnd = new PointF(
+            animation = new Animation();
+            animation.scaleStart = scale;
+            animation.scaleEnd = targetScale;
+            animation.time = System.currentTimeMillis();
+            animation.sCenterEndRequested = targetSCenter;
+            animation.sCenterStart = getCenter();
+            animation.sCenterEnd = targetSCenter;
+            animation.vFocusStart = sourceToViewCoord(targetSCenter);
+            animation.vFocusEnd = new PointF(
                     vxCenter,
                     vyCenter
             );
-            anim.duration = duration;
-            anim.interruptible = interruptible;
-            anim.easing = easing;
-            anim.time = System.currentTimeMillis();
+            animation.duration = duration;
+            animation.interruptible = interruptible;
+            animation.easing = easing;
+            animation.time = System.currentTimeMillis();
 
             if (vFocus != null) {
                 // Calculate where translation will be at the end of the anim
-                float vTranslateXEnd = vFocus.x - (targetScale * anim.sCenterStart.x);
-                float vTranslateYEnd = vFocus.y - (targetScale * anim.sCenterStart.y);
+                float vTranslateXEnd = vFocus.x - (targetScale * animation.sCenterStart.x);
+                float vTranslateYEnd = vFocus.y - (targetScale * animation.sCenterStart.y);
                 ScaleAndTranslate satEnd = new ScaleAndTranslate(targetScale, vTranslateXEnd, vTranslateYEnd);
                 // Fit the end translation into bounds
                 fitToBounds(true, satEnd);
                 // Adjust the position of the focus point at end so image will be in bounds
-                anim.vFocusEnd = new PointF(
+                animation.vFocusEnd = new PointF(
                         vFocus.x + (satEnd.vTranslate.x - vTranslateXEnd),
                         vFocus.y + (satEnd.vTranslate.y - vTranslateYEnd)
                 );
@@ -1547,7 +1547,7 @@ public abstract  class ScaleImageViewBase<ImageDataSource> extends View implemen
         }
     }
 
-    protected static class Anim {
+    public static class Animation {
 
         public float scaleStart; // Scale at start of anim
         public float scaleEnd; // Scale at end of anim (target)

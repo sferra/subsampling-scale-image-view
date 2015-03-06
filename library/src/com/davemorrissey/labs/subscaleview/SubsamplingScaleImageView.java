@@ -26,7 +26,6 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build.VERSION;
@@ -37,6 +36,7 @@ import android.util.Log;
 import com.davemorrissey.labs.subscaleview.R.styleable;
 import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder;
 import com.davemorrissey.labs.subscaleview.decoder.SkiaImageRegionDecoder;
+import com.davemorrissey.labs.subscaleview.task.ImageRegionDecoderTask;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -245,7 +245,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase<ImageRegionDec
     public final void setImageUri(Uri uri, ImageViewState state) {
         reset(true);
         if (state != null) { restoreState(state); }
-        BitmapInitTask task = new BitmapInitTask(this, getContext(), decoderClass, uri);
+        ImageRegionDecoderTask task = new ImageRegionDecoderTask(this, getContext(), decoderClass, uri);
         task.execute();
         invalidate();
     }
@@ -484,17 +484,12 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase<ImageRegionDec
             List<Tile> tileGrid = new ArrayList<Tile>(xTiles * yTiles);
             for (int x = 0; x < xTiles; x++) {
                 for (int y = 0; y < yTiles; y++) {
-                    Tile tile = new Tile();
-                    tile.sampleSize = sampleSize;
-                    tile.visible = sampleSize == fullImageSampleSize;
-                    tile.sRect = new Rect(
-                            x * sTileWidth,
-                            y * sTileHeight,
-                            (x + 1) * sTileWidth,
-                            (y + 1) * sTileHeight
+                    Tile tile = new Tile(
+                        x * sTileWidth, y * sTileHeight,
+                        sTileWidth, sTileHeight,
+                        sampleSize
                     );
-                    tile.vRect = new Rect(0, 0, 0, 0);
-                    tile.fileSRect = new Rect(tile.sRect);
+                    tile.visible = sampleSize == fullImageSampleSize;
                     tileGrid.add(tile);
                 }
             }
@@ -530,78 +525,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase<ImageRegionDec
                 onBaseLayerReady();
                 if (tileLoaderListener != null) {
                     tileLoaderListener.onBaseLayerReady();
-                }
-            }
-        }
-    }
-
-    /**
-     * Async task used to get image details without blocking the UI thread.
-     */
-    private static class BitmapInitTask extends AsyncTask<Void, Void, int[]> {
-        private final WeakReference<SubsamplingScaleImageView> viewRef;
-        private final WeakReference<Context> contextRef;
-        private final WeakReference<Class<? extends ImageRegionDecoder>> decoderClassRef;
-        private final Uri source;
-        private ImageRegionDecoder decoder;
-        private Exception exception;
-
-        public BitmapInitTask(SubsamplingScaleImageView view, Context context, Class<? extends ImageRegionDecoder> decoderClass, Uri source) {
-            this.viewRef = new WeakReference<SubsamplingScaleImageView>(view);
-            this.contextRef = new WeakReference<Context>(context);
-            this.decoderClassRef = new WeakReference<Class<? extends ImageRegionDecoder>>(decoderClass);
-            this.source = source;
-        }
-
-        @Override
-        protected int[] doInBackground(Void... params) {
-            try {
-                String sourceUri = source.toString();
-                Context context = contextRef.get();
-                Class<? extends ImageRegionDecoder> decoderClass = decoderClassRef.get();
-                if (context != null && decoderClass != null) {
-                    int exifOrientation = ORIENTATION_0;
-                    decoder = decoderClass.newInstance();
-                    Point dimensions = decoder.init(context, source);
-                    if (sourceUri.startsWith(FILE_SCHEME) && !sourceUri.startsWith(ASSET_SCHEME)) {
-                        try {
-                            ExifInterface exifInterface = new ExifInterface(sourceUri.substring(FILE_SCHEME.length() - 1));
-                            int orientationAttr = exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-                            if (orientationAttr == ExifInterface.ORIENTATION_NORMAL || orientationAttr == ExifInterface.ORIENTATION_UNDEFINED) {
-                                exifOrientation = ORIENTATION_0;
-                            } else if (orientationAttr == ExifInterface.ORIENTATION_ROTATE_90) {
-                                exifOrientation = ORIENTATION_90;
-                            } else if (orientationAttr == ExifInterface.ORIENTATION_ROTATE_180) {
-                                exifOrientation = ORIENTATION_180;
-                            } else if (orientationAttr == ExifInterface.ORIENTATION_ROTATE_270) {
-                                exifOrientation = ORIENTATION_270;
-                            } else {
-                                Log.w(TAG, "Unsupported EXIF orientation: " + orientationAttr);
-                            }
-                        } catch (Exception e) {
-                            Log.w(TAG, "Could not get EXIF orientation of image");
-                        }
-                    }
-                    return new int[] { dimensions.x, dimensions.y, exifOrientation };
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to initialise bitmap decoder", e);
-                this.exception = e;
-            }
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(int[] xyo) {
-            final SubsamplingScaleImageView subsamplingScaleImageView = viewRef.get();
-            if (subsamplingScaleImageView != null) {
-                if (decoder != null && xyo != null && xyo.length == 3) {
-                    subsamplingScaleImageView.onImageSourceAvailable(decoder, xyo[0], xyo[1], xyo[2]);
-                } else if (exception != null) {
-                    final ImageSizeDecoderListener listener = subsamplingScaleImageView.getImageSizeDecoderListener();
-                    if (listener != null) {
-                        listener.onImageSizeDecodingFailed(exception);
-                    }
                 }
             }
         }
@@ -673,20 +596,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase<ImageRegionDec
                 }
             }
         }
-    }
-
-    private static class Tile {
-
-        private Rect sRect;
-        private int sampleSize;
-        private Bitmap bitmap;
-        private boolean loading;
-        private boolean visible;
-
-        // Volatile fields instantiated once then updated before use to reduce GC.
-        private Rect vRect;
-        private Rect fileSRect;
-
     }
 
     /**
