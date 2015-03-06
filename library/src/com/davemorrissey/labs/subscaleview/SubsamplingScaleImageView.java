@@ -24,23 +24,15 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
-import android.graphics.Paint.Style;
 import android.graphics.Point;
-import android.graphics.PointF;
 import android.graphics.Rect;
 import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build.VERSION;
-import android.os.Handler;
-import android.os.Message;
-import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.util.TypedValue;
-import android.view.GestureDetector;
-import android.view.MotionEvent;
 
 import com.davemorrissey.labs.subscaleview.R.styleable;
 import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder;
@@ -62,39 +54,14 @@ import java.util.Map;
  * v prefixes - coordinates, translations and distances measured in screen (view) pixels
  * s prefixes - coordinates, translations and distances measured in source image pixels (scaled)
  */
-public class SubsamplingScaleImageView extends ScaleImageViewBase {
+public class SubsamplingScaleImageView extends ScaleImageViewBase<ImageRegionDecoder> {
 
     private static final String TAG = SubsamplingScaleImageView.class.getSimpleName();
-
-    // Overlay tile boundaries and other info
-    private boolean debug = false;
 
     // Density to reach before loading higher resolution tiles
     private int minimumTileDpi = -1;
 
-    // Gesture detection settings
-    private boolean panEnabled = true;
-    private boolean zoomEnabled = true;
-    private boolean quickScaleEnabled = true;
-
-    // Double tap zoom behaviour
-    private float doubleTapZoomScale = 1F;
-    private int doubleTapZoomStyle = ZOOM_FOCUS_FIXED;
-
-    // Is two-finger zooming in progress
-    private boolean isZooming;
-    // Is one-finger panning in progress
-    private boolean isPanning;
-    // Is quick-scale gesture in progress
-    private boolean isQuickScaling;
-    // Max touches used in current gesture
-    private int maxTouchCount;
-
-    // Fling detector
-    private GestureDetector detector;
-
     // Tile decoder
-    private ImageRegionDecoder decoder;
     private Class<? extends ImageRegionDecoder> decoderClass = SkiaImageRegionDecoder.class;
     private final Object decoderLock = new Object();
 
@@ -104,56 +71,12 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     // Map of zoom level to tile grid
     private Map<Integer, List<Tile>> tileMap;
 
-    // Debug values
-    private PointF vCenterStart;
-    private float vDistStart;
-
-    // Current quickscale state
-    private final float quickScaleThreshold;
-    private PointF quickScaleCenter;
-    private float quickScaleLastDistance;
-    private PointF quickScaleLastPoint;
-    private boolean quickScaleMoved;
-
-    // Scale and center animation tracking
-    private Anim anim;
-
-    // Whether a ready notification has been sent to subclasses
-    private boolean dimensionsReadySent = false;
     // Whether a base layer loaded notification has been sent to subclasses
     private boolean baseLayerReadySent = false;
-
-    // Event listener
-    private OnImageEventListener onImageEventListener;
-
-    // Long click listener
-    private OnLongClickListener onLongClickListener;
-
-    // Long click handler
-    private Handler handler;
-    private static final int MESSAGE_LONG_CLICK = 1;
-
-    // Paint objects created once and reused for efficiency
-    private Paint bitmapPaint;
-    private Paint debugPaint;
-    private Paint tileBgPaint;
+    private TileImageLoaderListener tileLoaderListener;
 
     public SubsamplingScaleImageView(Context context, AttributeSet attr) {
         super(context, attr);
-        setMinimumDpi(160);
-        setDoubleTapZoomDpi(160);
-        setGestureDetector(context);
-        this.handler = new Handler(new Handler.Callback() {
-            public boolean handleMessage(Message message) {
-                if (message.what == MESSAGE_LONG_CLICK && onLongClickListener != null) {
-                    maxTouchCount = 0;
-                    SubsamplingScaleImageView.super.setOnLongClickListener(onLongClickListener);
-                    performLongClick();
-                    SubsamplingScaleImageView.super.setOnLongClickListener(null);
-                }
-                return true;
-            }
-        });
         // Handle XML attributes
         if (attr != null) {
             TypedArray typedAttr = getContext().obtainStyledAttributes(attr, styleable.SubsamplingScaleImageView);
@@ -180,8 +103,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             }
             typedAttr.recycle();
         }
-
-        quickScaleThreshold = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 20, context.getResources().getDisplayMetrics());
     }
 
     public SubsamplingScaleImageView(Context context) {
@@ -334,35 +255,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      */
     protected void reset(boolean newImage) {
         super.reset(newImage);
-        scale = 0f;
-        scaleStart = 0f;
-        vTranslate = null;
-        vTranslateStart = null;
-        pendingScale = 0f;
-        sPendingCenter = null;
-        sRequestedCenter = null;
-        isZooming = false;
-        isPanning = false;
-        isQuickScaling = false;
-        maxTouchCount = 0;
         fullImageSampleSize = 0;
-        vCenterStart = null;
-        vDistStart = 0;
-        quickScaleCenter = null;
-        quickScaleLastDistance = 0f;
-        quickScaleLastPoint = null;
-        quickScaleMoved = false;
-        anim = null;
         if (newImage) {
-            if (decoder != null) {
-                synchronized (decoderLock) {
-                    decoder.recycle();
-                    decoder = null;
-                }
-            }
-            setSourceSize(0, 0);
-            sourceOrientation = 0;
-            dimensionsReadySent = false;
             baseLayerReadySent = false;
         }
         if (tileMap != null) {
@@ -377,374 +271,30 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             }
             tileMap = null;
         }
-        setGestureDetector(getContext());
     }
 
-    private void setGestureDetector(final Context context) {
-        this.detector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
-
-            @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                if (panEnabled && dimensionsReadySent && vTranslate != null && e1 != null && e2 != null && (Math.abs(e1.getX() - e2.getX()) > 50 || Math.abs(e1.getY() - e2.getY()) > 50) && (Math.abs(velocityX) > 500 || Math.abs(velocityY) > 500) && !isZooming) {
-                    PointF vTranslateEnd = new PointF(vTranslate.x + (velocityX * 0.25f), vTranslate.y + (velocityY * 0.25f));
-                    float sCenterXEnd = ((getWidth()/2) - vTranslateEnd.x)/scale;
-                    float sCenterYEnd = ((getHeight()/2) - vTranslateEnd.y)/scale;
-                    new AnimationBuilder(new PointF(sCenterXEnd, sCenterYEnd)).withEasing(EASE_OUT_QUAD).withPanLimited(false).start();
-                    return true;
-                }
-                return super.onFling(e1, e2, velocityX, velocityY);
-            }
-
-            @Override
-            public boolean onSingleTapConfirmed(MotionEvent e) {
-                performClick();
-                return true;
-            }
-
-            @Override
-            public boolean onDoubleTap(MotionEvent e) {
-                if (zoomEnabled && dimensionsReadySent && vTranslate != null) {
-                    if (quickScaleEnabled) {
-                        vCenterStart = new PointF(e.getX(), e.getY());
-                        vTranslateStart = new PointF(vTranslate.x, vTranslate.y);
-                        scaleStart = scale;
-
-                        isQuickScaling = true;
-                        isZooming = true;
-                        quickScaleCenter = viewToSourceCoord(vCenterStart);
-                        quickScaleLastDistance = -1F;
-                        quickScaleLastPoint = new PointF(quickScaleCenter.x, quickScaleCenter.y);
-                        quickScaleMoved = false;
-
-                        setGestureDetector(context);
-
-                        // We really want to get events in onTouchEvent after this, so don't return true
-                        return false;
-                    }
-
-                    float doubleTapZoomScale = Math.min(maxScale, SubsamplingScaleImageView.this.doubleTapZoomScale);
-                    boolean zoomIn = scale <= doubleTapZoomScale * 0.9;
-                    float targetScale = zoomIn ? doubleTapZoomScale : minScale();
-                    PointF targetSCenter = viewToSourceCoord(e.getX(), e.getY());
-                    if (doubleTapZoomStyle == ZOOM_FOCUS_CENTER_IMMEDIATE) {
-                        setScaleAndCenter(targetScale, targetSCenter);
-                    } else if (doubleTapZoomStyle == ZOOM_FOCUS_CENTER || !zoomIn) {
-                        new AnimationBuilder(targetScale, targetSCenter).withInterruptible(false).start();
-                    } else if (doubleTapZoomStyle == ZOOM_FOCUS_FIXED) {
-                        new AnimationBuilder(targetScale, targetSCenter, new PointF(e.getX(), e.getY())).withInterruptible(false).start();
-                    }
-
-                    // Hacky solution for #15 - after a double tap the GestureDetector gets in a state where the next
-                    // fling is ignored, so here we replace it with a new one.
-                    setGestureDetector(context);
-
-                    invalidate();
-                    return true;
-                }
-                return super.onDoubleTapEvent(e);
-            }
-        });
-    }
-
-    /**
-     * On resize, preserve center and scale. Various behaviours are possible, override this method to use another.
-     */
     @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        if (dimensionsReadySent) {
-            setScaleAndCenter(getScale(), getCenter());
-        }
-    }
-
-    /**
-     * Handle touch events. One finger pans, and two finger pinch and zoom plus panning.
-     */
-    @Override @SuppressWarnings("deprecation")
-    public boolean onTouchEvent(@NonNull MotionEvent event) {
-        // During non-interruptible anims, ignore all touch events
-        if (anim != null && !anim.interruptible) {
-            getParent().requestDisallowInterceptTouchEvent(true);
-            return true;
-        } else {
-            anim = null;
-        }
-
-        // Abort if not ready
-        if (vTranslate == null) {
-            return true;
-        }
-        // Detect flings, taps and double taps
-        if (!isQuickScaling && (detector == null || detector.onTouchEvent(event))) {
-            isZooming = false;
-            isPanning = false;
-            maxTouchCount = 0;
-            return true;
-        }
-
-        if (vTranslateStart == null) { vTranslateStart = new PointF(0, 0); }
-        if (vCenterStart == null) { vCenterStart = new PointF(0, 0); }
-
-        int touchCount = event.getPointerCount();
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN:
-            case MotionEvent.ACTION_POINTER_1_DOWN:
-            case MotionEvent.ACTION_POINTER_2_DOWN:
-                anim = null;
-                getParent().requestDisallowInterceptTouchEvent(true);
-                maxTouchCount = Math.max(maxTouchCount, touchCount);
-                if (touchCount >= 2) {
-                    if (zoomEnabled) {
-                        // Start pinch to zoom. Calculate distance between touch points and center point of the pinch.
-                        float distance = distance(event.getX(0), event.getX(1), event.getY(0), event.getY(1));
-                        scaleStart = scale;
-                        vDistStart = distance;
-                        vTranslateStart.set(vTranslate.x, vTranslate.y);
-                        vCenterStart.set((event.getX(0) + event.getX(1))/2, (event.getY(0) + event.getY(1))/2);
-                    } else {
-                        // Abort all gestures on second touch
-                        maxTouchCount = 0;
-                    }
-                    // Cancel long click timer
-                    handler.removeMessages(MESSAGE_LONG_CLICK);
-                } else if (!isQuickScaling) {
-                    // Start one-finger pan
-                    vTranslateStart.set(vTranslate.x, vTranslate.y);
-                    vCenterStart.set(event.getX(), event.getY());
-
-                    // Start long click timer
-                    handler.sendEmptyMessageDelayed(MESSAGE_LONG_CLICK, 600);
-                }
-                return true;
-            case MotionEvent.ACTION_MOVE:
-                boolean consumed = false;
-                if (maxTouchCount > 0) {
-                    if (touchCount >= 2) {
-                        // Calculate new distance between touch points, to scale and pan relative to start values.
-                        float vDistEnd = distance(event.getX(0), event.getX(1), event.getY(0), event.getY(1));
-                        float vCenterEndX = (event.getX(0) + event.getX(1))/2;
-                        float vCenterEndY = (event.getY(0) + event.getY(1))/2;
-
-                        if (zoomEnabled && (distance(vCenterStart.x, vCenterEndX, vCenterStart.y, vCenterEndY) > 5 || Math.abs(vDistEnd - vDistStart) > 5 || isPanning)) {
-                            isZooming = true;
-                            isPanning = true;
-                            consumed = true;
-
-                            scale = Math.min(maxScale, (vDistEnd / vDistStart) * scaleStart);
-
-                            if (scale <= minScale()) {
-                                // Minimum scale reached so don't pan. Adjust start settings so any expand will zoom in.
-                                vDistStart = vDistEnd;
-                                scaleStart = minScale();
-                                vCenterStart.set(vCenterEndX, vCenterEndY);
-                                vTranslateStart.set(vTranslate);
-                            } else if (panEnabled) {
-                                // Translate to place the source image coordinate that was at the center of the pinch at the start
-                                // at the center of the pinch now, to give simultaneous pan + zoom.
-                                float vLeftStart = vCenterStart.x - vTranslateStart.x;
-                                float vTopStart = vCenterStart.y - vTranslateStart.y;
-                                float vLeftNow = vLeftStart * (scale/scaleStart);
-                                float vTopNow = vTopStart * (scale/scaleStart);
-                                vTranslate.x = vCenterEndX - vLeftNow;
-                                vTranslate.y = vCenterEndY - vTopNow;
-                            } else if (sRequestedCenter != null) {
-                                // With a center specified from code, zoom around that point.
-                                vTranslate.x = (getWidth()/2) - (scale * sRequestedCenter.x);
-                                vTranslate.y = (getHeight()/2) - (scale * sRequestedCenter.y);
-                            } else {
-                                // With no requested center, scale around the image center.
-                                vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
-                                vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
-                            }
-
-                            fitToBounds(true);
-                            refreshRequiredTiles(false);
-                        }
-                    } else if (isQuickScaling) {
-                        // One finger zoom
-                        // Stole Google's Magical Formula™ to make sure it feels the exact same
-                        float dist = Math.abs(vCenterStart.y - event.getY()) * 2 + quickScaleThreshold;
-
-                        if (quickScaleLastDistance == -1F) quickScaleLastDistance = dist;
-                        boolean isUpwards = event.getY() > quickScaleLastPoint.y;
-                        quickScaleLastPoint.set(0, event.getY());
-
-                        float spanDiff = (Math.abs(1 - (dist / quickScaleLastDistance)) * 0.5F);
-
-                        if (spanDiff > 0.03f || quickScaleMoved) {
-                            quickScaleMoved = true;
-
-                            float multiplier = 1;
-                            if (quickScaleLastDistance > 0) {
-                                multiplier = isUpwards ? (1 + spanDiff) : (1 - spanDiff);
-                            }
-
-                            scale = Math.max(minScale(), Math.min(maxScale, scale * multiplier));
-
-                            if (panEnabled) {
-                                float vLeftStart = vCenterStart.x - vTranslateStart.x;
-                                float vTopStart = vCenterStart.y - vTranslateStart.y;
-                                float vLeftNow = vLeftStart * (scale/scaleStart);
-                                float vTopNow = vTopStart * (scale/scaleStart);
-                                vTranslate.x = vCenterStart.x - vLeftNow;
-                                vTranslate.y = vCenterStart.y - vTopNow;
-                            } else if (sRequestedCenter != null) {
-                                // With a center specified from code, zoom around that point.
-                                vTranslate.x = (getWidth()/2) - (scale * sRequestedCenter.x);
-                                vTranslate.y = (getHeight()/2) - (scale * sRequestedCenter.y);
-                            } else {
-                                // With no requested center, scale around the image center.
-                                vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
-                                vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
-                            }
-                        }
-
-                        quickScaleLastDistance = dist;
-
-                        fitToBounds(true);
-                        refreshRequiredTiles(false);
-
-                        consumed = true;
-                    } else if (!isZooming) {
-                        // One finger pan - translate the image. We do this calculation even with pan disabled so click
-                        // and long click behaviour is preserved.
-                        float dx = Math.abs(event.getX() - vCenterStart.x);
-                        float dy = Math.abs(event.getY() - vCenterStart.y);
-                        if (dx > 5 || dy > 5 || isPanning) {
-                            consumed = true;
-                            vTranslate.x = vTranslateStart.x + (event.getX() - vCenterStart.x);
-                            vTranslate.y = vTranslateStart.y + (event.getY() - vCenterStart.y);
-
-                            float lastX = vTranslate.x;
-                            float lastY = vTranslate.y;
-                            fitToBounds(true);
-                            boolean atXEdge = lastX != vTranslate.x;
-                            boolean edgeXSwipe = atXEdge && dx > dy && !isPanning;
-                            boolean yPan = lastY == vTranslate.y && dy > 15;
-                            if (!edgeXSwipe && (!atXEdge || yPan || isPanning)) {
-                                isPanning = true;
-                            } else if (dx > 5) {
-                                // Haven't panned the image, and we're at the left or right edge. Switch to page swipe.
-                                maxTouchCount = 0;
-                                handler.removeMessages(MESSAGE_LONG_CLICK);
-                                getParent().requestDisallowInterceptTouchEvent(false);
-                            }
-
-                            if (!panEnabled) {
-                                vTranslate.x = vTranslateStart.x;
-                                vTranslate.y = vTranslateStart.y;
-                                getParent().requestDisallowInterceptTouchEvent(false);
-                            }
-
-                            refreshRequiredTiles(false);
-                        }
-                    }
-                }
-                if (consumed) {
-                    handler.removeMessages(MESSAGE_LONG_CLICK);
-                    invalidate();
-                    return true;
-                }
-                break;
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_POINTER_UP:
-            case MotionEvent.ACTION_POINTER_2_UP:
-                handler.removeMessages(MESSAGE_LONG_CLICK);
-                if (isQuickScaling) {
-                    isQuickScaling = false;
-                    if (!quickScaleMoved) {
-                        float doubleTapZoomScale = Math.min(maxScale, SubsamplingScaleImageView.this.doubleTapZoomScale);
-                        boolean zoomIn = scale <= doubleTapZoomScale * 0.9;
-                        float targetScale = zoomIn ? doubleTapZoomScale : minScale();
-                        if (doubleTapZoomStyle == ZOOM_FOCUS_CENTER_IMMEDIATE) {
-                            setScaleAndCenter(targetScale, quickScaleCenter);
-                        } else if (doubleTapZoomStyle == ZOOM_FOCUS_CENTER || !zoomIn) {
-                            new AnimationBuilder(targetScale, quickScaleCenter).withInterruptible(false).start();
-                        } else if (doubleTapZoomStyle == ZOOM_FOCUS_FIXED) {
-                            new AnimationBuilder(targetScale, quickScaleCenter, vCenterStart).withInterruptible(false).start();
-                        }
-                        invalidate();
-                    }
-                }
-                if (maxTouchCount > 0 && (isZooming || isPanning)) {
-                    if (isZooming && touchCount == 2) {
-                        // Convert from zoom to pan with remaining touch
-                        isPanning = true;
-                        vTranslateStart.set(vTranslate.x, vTranslate.y);
-                        if (event.getActionIndex() == 1) {
-                            vCenterStart.set(event.getX(0), event.getY(0));
-                        } else {
-                            vCenterStart.set(event.getX(1), event.getY(1));
-                        }
-                    }
-                    if (touchCount < 3) {
-                        // End zooming when only one touch point
-                        isZooming = false;
-                    }
-                    if (touchCount < 2) {
-                        // End panning when no touch points
-                        isPanning = false;
-                        maxTouchCount = 0;
-                    }
-                    // Trigger load of tiles now required
-                    refreshRequiredTiles(true);
-                    return true;
-                }
-                if (touchCount == 1) {
-                    isZooming = false;
-                    isPanning = false;
-                    maxTouchCount = 0;
-                }
-                return true;
-        }
-        return super.onTouchEvent(event);
-    }
-
-    /**
-     * Draw method should not be called until the view has dimensions so the first calls are used as triggers to calculate
-     * the scaling and tiling required. Once the view is setup, tiles are displayed as they are loaded.
-     */
-    @Override
-    protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
-        createPaints();
-
-        // If image or view dimensions are not known yet, abort.
-        if (getSourceWidth() == 0 || getSourceHeight() == 0 || decoder == null || getWidth() == 0 || getHeight() == 0) {
-            return;
-        }
-
-        // On first render with no tile map ready, initialise it and kick off async base image loading.
-        if (tileMap == null) {
-            initialiseBaseLayer(getMaxBitmapDimensions(canvas));
-            return;
-        }
-
-        // Set scale and translate before draw.
-        preDraw();
-
-        // If animating scale, calculate current scale and center with easing equations
-        if (anim != null) {
-            long scaleElapsed = System.currentTimeMillis() - anim.time;
-            boolean finished = scaleElapsed > anim.duration;
-            scaleElapsed = Math.min(scaleElapsed, anim.duration);
-            scale = ease(anim.easing, scaleElapsed, anim.scaleStart, anim.scaleEnd - anim.scaleStart, anim.duration);
-
-            // Apply required animation to the focal point
-            float vFocusNowX = ease(anim.easing, scaleElapsed, anim.vFocusStart.x, anim.vFocusEnd.x - anim.vFocusStart.x, anim.duration);
-            float vFocusNowY = ease(anim.easing, scaleElapsed, anim.vFocusStart.y, anim.vFocusEnd.y - anim.vFocusStart.y, anim.duration);
-            // Find out where the focal point is at this scale and adjust its position to follow the animation path
-            vTranslate.x -= sourceToViewX(anim.sCenterEnd.x) - vFocusNowX;
-            vTranslate.y -= sourceToViewY(anim.sCenterEnd.y) - vFocusNowY;
-
-            // For translate anims, showing the image non-centered is never allowed, for scaling anims it is during the animation.
-            fitToBounds(finished || (anim.scaleStart == anim.scaleEnd));
-            refreshRequiredTiles(finished);
-            if (finished) {
-                anim = null;
+    protected void discardImageDataSource() {
+        if (imageDataSource != null) {
+            synchronized (decoderLock) {
+                imageDataSource.recycle();
+                imageDataSource = null;
             }
-            invalidate();
         }
+    }
 
+    @Override
+    protected boolean isInitialImageDataLoaded() {
+        return tileMap != null;
+    }
+
+    @Override
+    protected void preloadInitialImageData(Canvas canvas) {
+        initialiseBaseLayer(getMaxBitmapDimensions(canvas));
+    }
+
+    @Override
+    protected void drawImageData(Canvas canvas) {
         // Optimum sample size for current scale
         int sampleSize = Math.min(fullImageSampleSize, calculateInSampleSize());
 
@@ -761,61 +311,30 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         }
 
         // Render all loaded tiles. LinkedHashMap used for bottom up rendering - lower res tiles underneath.
+        final boolean debugEnabled = isDebugEnabled();
+        final Paint debugPaint = getDebugPaint();
+        final Paint backgroundPaint = getBackgroundPaint();
+        final Paint bitmapPaint = getBitmapPaint();
         for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
             if (tileMapEntry.getKey() == sampleSize || hasMissingTiles) {
                 for (Tile tile : tileMapEntry.getValue()) {
                     sourceToViewRect(tile.sRect, tile.vRect);
                     if (!tile.loading && tile.bitmap != null) {
-                        if (tileBgPaint != null) {
-                            canvas.drawRect(tile.vRect, tileBgPaint);
+                        if (backgroundPaint != null) {
+                            canvas.drawRect(tile.vRect, backgroundPaint);
                         }
                         canvas.drawBitmap(tile.bitmap, null, tile.vRect, bitmapPaint);
-                        if (debug) {
+                        if (debugEnabled) {
                             canvas.drawRect(tile.vRect, debugPaint);
                         }
-                    } else if (tile.loading && debug) {
+                    } else if (tile.loading && debugEnabled) {
                         canvas.drawText("LOADING", tile.vRect.left + 5, tile.vRect.top + 35, debugPaint);
                     }
-                    if (tile.visible && debug) {
+                    if (tile.visible && debugEnabled) {
                         canvas.drawText("ISS " + tile.sampleSize + " RECT " + tile.sRect.top + "," + tile.sRect.left + "," + tile.sRect.bottom + "," + tile.sRect.right, tile.vRect.left + 5, tile.vRect.top + 15, debugPaint);
                     }
                 }
             }
-        }
-
-        if (debug) {
-            canvas.drawText("Scale: " + String.format("%.2f", scale), 5, 15, debugPaint);
-            canvas.drawText("Translate: " + String.format("%.2f", vTranslate.x) + ":" + String.format("%.2f", vTranslate.y), 5, 35, debugPaint);
-            PointF center = getCenter();
-            canvas.drawText("Source center: " + String.format("%.2f", center.x) + ":" + String.format("%.2f", center.y), 5, 55, debugPaint);
-
-            if (anim != null) {
-                PointF vCenterStart = sourceToViewCoord(anim.sCenterStart);
-                PointF vCenterEndRequested = sourceToViewCoord(anim.sCenterEndRequested);
-                PointF vCenterEnd = sourceToViewCoord(anim.sCenterEnd);
-                canvas.drawCircle(vCenterStart.x, vCenterStart.y, 10, debugPaint);
-                canvas.drawCircle(vCenterEndRequested.x, vCenterEndRequested.y, 20, debugPaint);
-                canvas.drawCircle(vCenterEnd.x, vCenterEnd.y, 25, debugPaint);
-                canvas.drawCircle(getWidth()/2, getHeight()/2, 30, debugPaint);
-            }
-        }
-    }
-
-    /**
-     * Creates Paint objects once when first needed.
-     */
-    private void createPaints() {
-        if (bitmapPaint == null) {
-            bitmapPaint = new Paint();
-            bitmapPaint.setAntiAlias(true);
-            bitmapPaint.setFilterBitmap(true);
-            bitmapPaint.setDither(true);
-        }
-        if (debugPaint == null && debug) {
-            debugPaint = new Paint();
-            debugPaint.setTextSize(18);
-            debugPaint.setColor(Color.MAGENTA);
-            debugPaint.setStyle(Style.STROKE);
         }
     }
 
@@ -824,7 +343,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      * the base layer image - the whole source subsampled as necessary.
      */
     private synchronized void initialiseBaseLayer(Point maxTileDimensions) {
-
         fitToBounds(true);
 
         // Load double resolution - next level will be split into four tiles and at the center all four are required,
@@ -838,7 +356,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
 
         List<Tile> baseGrid = tileMap.get(fullImageSampleSize);
         for (Tile baseTile : baseGrid) {
-            BitmapTileTask task = new BitmapTileTask(this, decoder, baseTile);
+            BitmapTileTask task = new BitmapTileTask(this, imageDataSource, baseTile);
             task.execute();
         }
 
@@ -849,7 +367,10 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      * that are at least as high resolution as the screen. Frees up bitmaps that are now off the screen.
      * @param load Whether to load the new tiles needed. Use false while scrolling/panning for performance.
      */
-    private void refreshRequiredTiles(boolean load) {
+    protected void refreshImageData(boolean load) {
+        if (!isInitialImageDataLoaded()) {
+            return;
+        }
         int sampleSize = Math.min(fullImageSampleSize, calculateInSampleSize());
 
         // Load tiles of the correct sample size that are on screen. Discard tiles off screen, and those that are higher
@@ -867,7 +388,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
                     if (tileVisible(tile)) {
                         tile.visible = true;
                         if (!tile.loading && tile.bitmap == null && load) {
-                            BitmapTileTask task = new BitmapTileTask(this, decoder, tile);
+                            BitmapTileTask task = new BitmapTileTask(this, imageDataSource, tile);
                             task.execute();
                         }
                     } else if (tile.sampleSize != fullImageSampleSize) {
@@ -894,25 +415,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             sVisTop = viewToSourceY(0),
             sVisBottom = viewToSourceY(getHeight());
         return !(sVisLeft > tile.sRect.right || tile.sRect.left > sVisRight || sVisTop > tile.sRect.bottom || tile.sRect.top > sVisBottom);
-    }
-
-    /**
-     * Sets scale and translate ready for the next draw.
-     */
-    private void preDraw() {
-        // If waiting to translate to new center position, set translate now
-        if (sPendingCenter != null && pendingScale != null) {
-            scale = pendingScale;
-            vTranslate.x = (getWidth()/2) - (scale * sPendingCenter.x);
-            vTranslate.y = (getHeight()/2) - (scale * sPendingCenter.y);
-            sPendingCenter = null;
-            pendingScale = null;
-            fitToBounds(true);
-            refreshRequiredTiles(true);
-        }
-
-        // On first display of base image set up position, and in other cases make sure scale is correct.
-        fitToBounds(false);
     }
 
     /**
@@ -1006,27 +508,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
     }
 
     /**
-     * Called by worker task when decoder is ready and image size and EXIF orientation is known.
-     */
-    private void onImageInited(ImageRegionDecoder decoder, int sWidth, int sHeight, int sOrientation) {
-        this.decoder = decoder;
-        setSourceSize(sWidth, sHeight);
-        this.sourceOrientation = sOrientation;
-        requestLayout();
-        invalidate();
-
-        // Inform subclasses that image dimensions are known and the scale and translate are set.
-        if (!dimensionsReadySent) {
-            preDraw();
-            dimensionsReadySent = true;
-            onImageReady();
-            if (onImageEventListener != null) {
-                onImageEventListener.onImageReady();
-            }
-        }
-    }
-
-    /**
      * Called by worker task when a tile has loaded. Redraws the view.
      */
     private synchronized void onTileLoaded() {
@@ -1047,8 +528,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             if (baseLayerReady) {
                 baseLayerReadySent = true;
                 onBaseLayerReady();
-                if (onImageEventListener != null) {
-                    onImageEventListener.onBaseLayerReady();
+                if (tileLoaderListener != null) {
+                    tileLoaderListener.onBaseLayerReady();
                 }
             }
         }
@@ -1115,9 +596,12 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             final SubsamplingScaleImageView subsamplingScaleImageView = viewRef.get();
             if (subsamplingScaleImageView != null) {
                 if (decoder != null && xyo != null && xyo.length == 3) {
-                    subsamplingScaleImageView.onImageInited(decoder, xyo[0], xyo[1], xyo[2]);
-                } else if (exception != null && subsamplingScaleImageView.onImageEventListener != null) {
-                    subsamplingScaleImageView.onImageEventListener.onInitialisationError(exception);
+                    subsamplingScaleImageView.onImageSourceAvailable(decoder, xyo[0], xyo[1], xyo[2]);
+                } else if (exception != null) {
+                    final ImageSizeDecoderListener listener = subsamplingScaleImageView.getImageSizeDecoderListener();
+                    if (listener != null) {
+                        listener.onImageSizeDecodingFailed(exception);
+                    }
                 }
             }
         }
@@ -1165,8 +649,8 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
                 Log.e(TAG, "Failed to decode tile", e);
                 this.exception = e;
                 final SubsamplingScaleImageView subsamplingScaleImageView = viewRef.get();
-                if (subsamplingScaleImageView != null && subsamplingScaleImageView.onImageEventListener != null) {
-                    subsamplingScaleImageView.onImageEventListener.onTileLoadError(e);
+                if (subsamplingScaleImageView != null && subsamplingScaleImageView.getTileImageLoaderListener() != null) {
+                    subsamplingScaleImageView.getTileImageLoaderListener().onTileLoadError(e);
                 }
             }
             return null;
@@ -1181,8 +665,11 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
                     tile.bitmap = bitmap;
                     tile.loading = false;
                     subsamplingScaleImageView.onTileLoaded();
-                } else if (exception != null && subsamplingScaleImageView.onImageEventListener != null) {
-                    subsamplingScaleImageView.onImageEventListener.onTileLoadError(exception);
+                } else if (exception != null) {
+                    final TileImageLoaderListener listener = subsamplingScaleImageView.getTileImageLoaderListener();
+                    if (listener != null) {
+                        listener.onTileLoadError(exception);
+                    }
                 }
             }
         }
@@ -1207,6 +694,7 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
      */
     private Point getMaxBitmapDimensions(Canvas canvas) {
         if (VERSION.SDK_INT >= 14) {
+            // TODO don't use reflection
             try {
                 int maxWidth = (Integer)Canvas.class.getMethod("getMaximumBitmapWidth").invoke(canvas);
                 int maxHeight = (Integer)Canvas.class.getMethod("getMaximumBitmapHeight").invoke(canvas);
@@ -1232,69 +720,6 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
             target.set(getSourceWidth() - sRect.right, getSourceHeight() - sRect.bottom, getSourceWidth() - sRect.left, getSourceHeight() - sRect.top);
         } else {
             target.set(getSourceWidth() - sRect.bottom, sRect.left, getSourceWidth() - sRect.top, sRect.right);
-        }
-    }
-
-    /**
-     * Releases all resources the view is using and resets the state, nulling any fields that use significant memory.
-     * After you have called this method, the view can be re-used by setting a new image. Settings are remembered
-     * but state (scale and center) is forgotten. You can restore these yourself if required.
-     */
-    public void recycle() {
-        reset(true);
-        bitmapPaint = null;
-        debugPaint = null;
-        tileBgPaint = null;
-    }
-
-    /**
-     * Apply a selected type of easing.
-     * @param type Easing type, from static fields
-     * @param time Elapsed time
-     * @param from Start value
-     * @param change Target value
-     * @param duration Anm duration
-     * @return Current value
-     */
-    private float ease(int type, long time, float from, float change, long duration) {
-        switch (type) {
-            case EASE_IN_OUT_QUAD:
-                return easeInOutQuad(time, from, change, duration);
-            case EASE_OUT_QUAD:
-                return easeOutQuad(time, from, change, duration);
-            default:
-                throw new IllegalStateException("Unexpected easing type: " + type);
-        }
-    }
-
-    /**
-     * Quadratic easing for fling. With thanks to Robert Penner - http://gizma.com/easing/
-     * @param time Elapsed time
-     * @param from Start value
-     * @param change Target value
-     * @param duration Anm duration
-     * @return Current value
-     */
-    private float easeOutQuad(long time, float from, float change, long duration) {
-        float progress = (float)time/(float)duration;
-        return -change * progress*(progress-2) + from;
-    }
-
-    /**
-     * Quadratic easing for scale and center animations. With thanks to Robert Penner - http://gizma.com/easing/
-     * @param time Elapsed time
-     * @param from Start value
-     * @param change Target value
-     * @param duration Anm duration
-     * @return Current value
-     */
-    private float easeInOutQuad(long time, float from, float change, long duration) {
-        float timeF = time/(duration/2f);
-        if (timeF < 1) {
-            return (change/2f * timeF * timeF) + from;
-        } else {
-            timeF--;
-            return (-change/2f) * (timeF * (timeF - 2) - 1) + from;
         }
     }
 
@@ -1329,33 +754,12 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         }
     }
 
-    /**
-     * Subclasses can override this method to be informed when the view is set up and ready for rendering,
-     * so they can skip their own rendering until the base layer dimensions are known and the scale and
-     * translate have been calculated. This is called before the base layer tiles have been loaded;
-     * to be notified when they are ready override {@link #onBaseLayerReady()}. You can also use an
-     * {@link OnImageEventListener} to receive notification of these events.
-     */
-    protected void onImageReady() {
-
-    }
-
-    /**
-     * Call to find whether the view is initialised and ready for rendering tiles. The view is ready
-     * once the dimensions of the image are known.
-     */
-    public final boolean isImageReady() {
-        return dimensionsReadySent && vTranslate != null && tileMap != null && getSourceWidth() > 0 && getSourceHeight() > 0;
-    }
-
-    /**
+     /**
      * Subclasses can override this method to be informed when the base layer tiles have been loaded -
      * this is called immediately before the view draws them. You can also use an {@link OnImageEventListener}
      * to receive notification of this event.
      */
-    protected void onBaseLayerReady() {
-
-    }
+    protected void onBaseLayerReady() { }
 
     /**
      * Call to find whether the base layer tiles have been loaded. Before this event the view is blank.
@@ -1364,291 +768,21 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         return baseLayerReadySent;
     }
 
-    /**
-     * Returns true if zoom gesture detection is enabled.
-     */
-    public final boolean isZoomEnabled() {
-        return zoomEnabled;
+    public TileImageLoaderListener getTileImageLoaderListener() {
+        return tileLoaderListener;
     }
 
-    /**
-     * Enable or disable zoom gesture detection. Disabling zoom locks the the current scale.
-     */
-    public final void setZoomEnabled(boolean zoomEnabled) {
-        this.zoomEnabled = zoomEnabled;
-    }
-
-    /**
-     * Returns true if pan gesture detection is enabled.
-     */
-    public final boolean isPanEnabled() {
-        return panEnabled;
-    }
-
-    /**
-     * Enable or disable pan gesture detection. Disabling pan causes the image to be centered.
-     */
-    public final void setPanEnabled(boolean panEnabled) {
-        this.panEnabled = panEnabled;
-        if (!panEnabled && vTranslate != null) {
-            vTranslate.x = (getWidth()/2) - (scale * (rotatedSourceWidth()/2));
-            vTranslate.y = (getHeight()/2) - (scale * (rotatedSourceHeight()/2));
-            if (isImageReady()) {
-                refreshRequiredTiles(true);
-                invalidate();
-            }
-        }
-    }
-
-    /**
-     * Returns true if double tap & swipe to zoom is enabled.
-     */
-    public final boolean isQuickScaleEnabled() {
-        return quickScaleEnabled;
-    }
-
-    /**
-     * Enable or disable double tap & swipe to zoom.
-     */
-    public final void setQuickScaleEnabled(boolean quickScaleEnabled) {
-        this.quickScaleEnabled = zoomEnabled;
-    }
-
-    /**
-     * Set a solid color to render behind tiles, useful for displaying transparent PNGs.
-     * @param tileBgColor Background color for tiles.
-     */
-    public final void setTileBackgroundColor(int tileBgColor) {
-        if (Color.alpha(tileBgColor) == 0) {
-            tileBgPaint = null;
-        } else {
-            tileBgPaint = new Paint();
-            tileBgPaint.setStyle(Style.FILL);
-            tileBgPaint.setColor(tileBgColor);
-        }
-        invalidate();
-    }
-
-    /**
-     * Set the scale the image will zoom in to when double tapped. This also the scale point where a double tap is interpreted
-     * as a zoom out gesture - if the scale is greater than 90% of this value, a double tap zooms out. Avoid using values
-     * greater than the max zoom.
-     * @param doubleTapZoomScale New value for double tap gesture zoom scale.
-     */
-    public final void setDoubleTapZoomScale(float doubleTapZoomScale) {
-        this.doubleTapZoomScale = doubleTapZoomScale;
-    }
-
-    /**
-     * A density aware alternative to {@link #setDoubleTapZoomScale(float)}; this allows you to express the scale the
-     * image will zoom in to when double tapped in terms of the image pixel density. Values lower than the max scale will
-     * be ignored. A sensible starting point is 160 - the default used by this view.
-     * @param dpi New value for double tap gesture zoom scale.
-     */
-    public final void setDoubleTapZoomDpi(int dpi) {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        float averageDpi = (metrics.xdpi + metrics.ydpi)/2;
-        setDoubleTapZoomScale(averageDpi/dpi);
-    }
-
-    /**
-     * Set the type of zoom animation to be used for double taps. See static fields.
-     * @param doubleTapZoomStyle New value for zoom style.
-     */
-    public final void setDoubleTapZoomStyle(int doubleTapZoomStyle) {
-        if (!VALID_ZOOM_STYLES.contains(doubleTapZoomStyle)) {
-            throw new IllegalArgumentException("Invalid zoom style: " + doubleTapZoomStyle);
-        }
-        this.doubleTapZoomStyle = doubleTapZoomStyle;
-    }
-
-    /**
-     * Enables visual debugging, showing tile boundaries and sizes.
-     */
-    public final void setDebug(boolean debug) {
-        this.debug = debug;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void setOnLongClickListener(OnLongClickListener onLongClickListener) {
-        this.onLongClickListener = onLongClickListener;
+    public void setTileImageLoaderListener(TileImageLoaderListener listener) {
+        this.tileLoaderListener = listener;
     }
 
     /**
      * Add a listener allowing notification of load and error events.
+     * @deprecated Use {@link #setTileImageLoaderListener(TileImageLoaderListener)} and {@link #setImageSizeDecoderListener(ImageSizeDecoderListener)} instead.
      */
     public void setOnImageEventListener(OnImageEventListener onImageEventListener) {
-        this.onImageEventListener = onImageEventListener;
-    }
-
-    /**
-     * Creates a panning animation builder, that when started will animate the image to place the given coordinates of
-     * the image in the center of the screen. If doing this would move the image beyond the edges of the screen, the
-     * image is instead animated to move the center point as near to the center of the screen as is allowed - it's
-     * guaranteed to be on screen.
-     * @param sCenter Target center point
-     * @return {@link AnimationBuilder} instance. Call {@link SubsamplingScaleImageView.AnimationBuilder#start()} to start the anim.
-     */
-    public AnimationBuilder animateCenter(PointF sCenter) {
-        if (!isImageReady()) {
-            return null;
-        }
-        return new AnimationBuilder(sCenter);
-    }
-
-    /**
-     * Creates a scale animation builder, that when started will animate a zoom in or out. If this would move the image
-     * beyond the panning limits, the image is automatically panned during the animation.
-     * @param scale Target scale.
-     * @return {@link AnimationBuilder} instance. Call {@link SubsamplingScaleImageView.AnimationBuilder#start()} to start the anim.
-     */
-    public AnimationBuilder animateScale(float scale) {
-        if (!isImageReady()) {
-            return null;
-        }
-        return new AnimationBuilder(scale);
-    }
-
-    /**
-     * Creates a scale animation builder, that when started will animate a zoom in or out. If this would move the image
-     * beyond the panning limits, the image is automatically panned during the animation.
-     * @param scale Target scale.
-     * @return {@link AnimationBuilder} instance. Call {@link SubsamplingScaleImageView.AnimationBuilder#start()} to start the anim.
-     */
-    public AnimationBuilder animateScaleAndCenter(float scale, PointF sCenter) {
-        if (!isImageReady()) {
-            return null;
-        }
-        return new AnimationBuilder(scale, sCenter);
-    }
-
-    /**
-     * Builder class used to set additional options for a scale animation. Create an instance using {@link #animateScale(float)},
-     * then set your options and call {@link #start()}.
-     */
-    public final class AnimationBuilder {
-
-        private final float targetScale;
-        private final PointF targetSCenter;
-        private final PointF vFocus;
-        private long duration = 500;
-        private int easing = EASE_IN_OUT_QUAD;
-        private boolean interruptible = true;
-        private boolean panLimited = true;
-
-        private AnimationBuilder(PointF sCenter) {
-            this.targetScale = scale;
-            this.targetSCenter = sCenter;
-            this.vFocus = null;
-        }
-
-        private AnimationBuilder(float scale) {
-            this.targetScale = scale;
-            this.targetSCenter = getCenter();
-            this.vFocus = null;
-        }
-
-        private AnimationBuilder(float scale, PointF sCenter) {
-            this.targetScale = scale;
-            this.targetSCenter = sCenter;
-            this.vFocus = null;
-        }
-
-        private AnimationBuilder(float scale, PointF sCenter, PointF vFocus) {
-            this.targetScale = scale;
-            this.targetSCenter = sCenter;
-            this.vFocus = vFocus;
-        }
-
-        /**
-         * Desired duration of the anim in milliseconds. Default is 500.
-         * @param duration duration in milliseconds.
-         * @return this builder for method chaining.
-         */
-        public AnimationBuilder withDuration(long duration) {
-            this.duration = duration;
-            return this;
-        }
-
-        /**
-         * Whether the animation can be interrupted with a touch. Default is true.
-         * @param interruptible interruptible flag.
-         * @return this builder for method chaining.
-         */
-        public AnimationBuilder withInterruptible(boolean interruptible) {
-            this.interruptible = interruptible;
-            return this;
-        }
-
-        /**
-         * Set the easing style. See static fields. {@link #EASE_IN_OUT_QUAD} is recommended, and the default.
-         * @param easing easing style.
-         * @return this builder for method chaining.
-         */
-        public AnimationBuilder withEasing(int easing) {
-            if (!VALID_EASING_STYLES.contains(easing)) {
-                throw new IllegalArgumentException("Unknown easing type: " + easing);
-            }
-            this.easing = easing;
-            return this;
-        }
-
-        /**
-         * Only for internal use. When set to true, the animation proceeds towards the actual end point - the nearest
-         * point to the center allowed by pan limits. When false, animation is in the direction of the requested end
-         * point and is stopped when the limit for each axis is reached. The latter behaviour is used for flings but
-         * nothing else.
-         */
-        private AnimationBuilder withPanLimited(boolean panLimited) {
-            this.panLimited = panLimited;
-            return this;
-        }
-
-        /**
-         * Starts the animation.
-         */
-        public void start() {
-            int vxCenter = getPaddingLeft() + (getWidth() - getPaddingRight() - getPaddingLeft())/2;
-            int vyCenter = getPaddingTop() + (getHeight() - getPaddingBottom() - getPaddingTop())/2;
-            float targetScale = limitedScale(this.targetScale);
-            PointF targetSCenter = panLimited ? limitedSCenter(this.targetSCenter.x, this.targetSCenter.y, targetScale, new PointF()) : this.targetSCenter;
-            anim = new Anim();
-            anim.scaleStart = scale;
-            anim.scaleEnd = targetScale;
-            anim.time = System.currentTimeMillis();
-            anim.sCenterEndRequested = targetSCenter;
-            anim.sCenterStart = getCenter();
-            anim.sCenterEnd = targetSCenter;
-            anim.vFocusStart = sourceToViewCoord(targetSCenter);
-            anim.vFocusEnd = new PointF(
-                vxCenter,
-                vyCenter
-            );
-            anim.duration = duration;
-            anim.interruptible = interruptible;
-            anim.easing = easing;
-            anim.time = System.currentTimeMillis();
-
-            if (vFocus != null) {
-                // Calculate where translation will be at the end of the anim
-                float vTranslateXEnd = vFocus.x - (targetScale * anim.sCenterStart.x);
-                float vTranslateYEnd = vFocus.y - (targetScale * anim.sCenterStart.y);
-                ScaleAndTranslate satEnd = new ScaleAndTranslate(targetScale, new PointF(vTranslateXEnd, vTranslateYEnd));
-                // Fit the end translation into bounds
-                fitToBounds(true, satEnd);
-                // Adjust the position of the focus point at end so image will be in bounds
-                anim.vFocusEnd = new PointF(
-                        vFocus.x + (satEnd.vTranslate.x - vTranslateXEnd),
-                        vFocus.y + (satEnd.vTranslate.y - vTranslateYEnd)
-                );
-            }
-
-            invalidate();
-        }
-
+        setImageSizeDecoderListener(new DeprecatedListenerWrapper(onImageEventListener));
+        setTileImageLoaderListener(onImageEventListener);
     }
 
     /**
@@ -1670,5 +804,4 @@ public class SubsamplingScaleImageView extends ScaleImageViewBase {
         @Override public void onTileLoadError(Exception e) { }
 
     }
-
 }

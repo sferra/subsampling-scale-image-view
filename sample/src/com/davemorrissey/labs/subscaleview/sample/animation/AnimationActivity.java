@@ -23,8 +23,9 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.TextView;
+
+import com.davemorrissey.labs.subscaleview.ScaleImageViewBase;
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView;
-import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.AnimationBuilder;
 import com.davemorrissey.labs.subscaleview.sample.R.id;
 import com.davemorrissey.labs.subscaleview.sample.R.layout;
 import com.davemorrissey.labs.subscaleview.sample.extension.views.PinView;
@@ -87,7 +88,7 @@ public class AnimationActivity extends Activity implements OnClickListener {
                 float scale = (random.nextFloat() * (maxScale - minScale)) + minScale;
                 PointF center = new PointF(random.nextInt(pinView.getSWidth()), random.nextInt(pinView.getSHeight()));
                 pinView.setPin(center);
-                AnimationBuilder animationBuilder = pinView.animateScaleAndCenter(scale, center);
+                ScaleImageViewBase.AnimationBuilder animationBuilder = pinView.animateScaleAndCenter(scale, center);
                 if (position == 3) {
                     animationBuilder.withDuration(2000).withEasing(SubsamplingScaleImageView.EASE_OUT_QUAD).withInterruptible(false).start();
                 } else {
